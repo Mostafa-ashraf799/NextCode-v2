@@ -1,0 +1,3856 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NexCode — AI Code Editor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
+<style>
+/* ═══════════════════════════════════════════
+   DESIGN TOKENS — Deep-Void Dark + Cyan
+═══════════════════════════════════════════ */
+:root {
+  --bg-void:    #080c10;
+  --bg-base:    #0d1117;
+  --bg-surface: #111820;
+  --bg-raised:  #161e28;
+  --bg-card:    rgba(22, 30, 40, 0.85);
+
+  --border:     rgba(255,255,255,0.06);
+  --border-mid: rgba(255,255,255,0.10);
+  --border-act: rgba(45,212,191,0.35);
+
+  --cyan:       #2dd4bf;
+  --cyan-dim:   rgba(45,212,191,0.15);
+  --cyan-glow:  rgba(45,212,191,0.08);
+  --purple:     #a78bfa;
+  --green:      #34d399;
+  --orange:     #fb923c;
+  --red:        #f87171;
+  --yellow:     #fbbf24;
+
+  --text-pri:   #e2e8f0;
+  --text-sec:   #94a3b8;
+  --text-muted: #475569;
+  --text-code:  #cdd9e5;
+
+  --radius-sm:  6px;
+  --radius-md:  10px;
+  --radius-lg:  14px;
+
+  --font-ui:    'Inter', sans-serif;
+  --font-code:  'JetBrains Mono', monospace;
+
+  --header-h:   48px;
+  --sidebar-w:  52px;
+  --chat-w:     360px;
+  --tabs-h:     38px;
+  --status-h:   26px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  background: var(--bg-void);
+  color: var(--text-pri);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ═══════════════════════════════════════════
+   LAYOUT SHELL
+═══════════════════════════════════════════ */
+#app {
+  display: grid;
+  grid-template-rows: var(--header-h) 1fr var(--status-h);
+  grid-template-columns: var(--sidebar-w) 1fr var(--chat-w);
+  height: 100vh;
+}
+
+/* ═══════════════════════════════════════════
+   HEADER
+═══════════════════════════════════════════ */
+#header {
+  grid-column: 1 / -1;
+  background: var(--bg-base);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  gap: 16px;
+  position: relative;
+  z-index: 100;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: -0.02em;
+  color: var(--text-pri);
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+.logo-icon {
+  width: 26px; height: 26px;
+  background: linear-gradient(135deg, var(--cyan), #00b8a9);
+  border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px;
+}
+
+.logo-badge {
+  font-size: 9px; font-weight: 600;
+  background: var(--cyan-dim);
+  color: var(--cyan);
+  border: 1px solid var(--border-act);
+  border-radius: 999px;
+  padding: 1px 6px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.header-sep { width: 1px; height: 20px; background: var(--border); flex-shrink: 0; }
+.header-flex { flex: 1; }
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Provider selector in header */
+.provider-pill {
+  display: flex; align-items: center; gap: 6px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-mid);
+  border-radius: var(--radius-sm);
+  padding: 5px 10px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-pri);
+  transition: border-color 0.15s, background 0.15s;
+  position: relative;
+}
+.provider-pill:hover { border-color: var(--border-act); background: var(--bg-raised); }
+.provider-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
+.provider-dot.disconnected { background: var(--text-muted); }
+.provider-arrow { color: var(--text-muted); font-size: 10px; }
+
+.btn-icon {
+  width: 30px; height: 30px;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-sec);
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.15s;
+}
+.btn-icon:hover { background: var(--bg-surface); border-color: var(--border); color: var(--text-pri); }
+
+.btn-run {
+  display: flex; align-items: center; gap: 6px;
+  background: linear-gradient(135deg, var(--cyan) 0%, #00c9b7 100%);
+  color: #0a1628;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font-ui);
+  transition: opacity 0.15s, transform 0.1s;
+}
+.btn-run:hover { opacity: 0.9; transform: translateY(-1px); }
+.btn-run:active { transform: translateY(0); }
+
+/* ═══════════════════════════════════════════
+   ACTIVITY BAR (LEFT SIDEBAR)
+═══════════════════════════════════════════ */
+#activity-bar {
+  background: var(--bg-base);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 0;
+  gap: 2px;
+  z-index: 50;
+}
+
+.ab-btn {
+  width: 36px; height: 36px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 16px;
+  position: relative;
+  transition: all 0.15s;
+  border: 1px solid transparent;
+}
+.ab-btn:hover { color: var(--text-pri); background: var(--bg-surface); }
+.ab-btn.active { color: var(--cyan); background: var(--cyan-glow); border-color: var(--border-act); }
+
+.ab-btn-tooltip {
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 50%; transform: translateY(-50%);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-mid);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-pri);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 200;
+}
+.ab-btn:hover .ab-btn-tooltip { opacity: 1; }
+
+.ab-spacer { flex: 1; }
+
+/* ═══════════════════════════════════════════
+   EDITOR AREA (CENTER)
+═══════════════════════════════════════════ */
+#editor-area {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-void);
+  position: relative;
+}
+
+/* File Tabs */
+#file-tabs {
+  height: var(--tabs-h);
+  background: var(--bg-base);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: flex-end;
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex-shrink: 0;
+  scrollbar-width: none;
+}
+#file-tabs::-webkit-scrollbar { display: none; }
+
+.file-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  height: 32px;
+  border-right: 1px solid var(--border);
+  cursor: pointer;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-family: var(--font-ui);
+  position: relative;
+  flex-shrink: 0;
+  transition: color 0.12s, background 0.12s;
+  user-select: none;
+}
+.file-tab:hover { color: var(--text-sec); background: var(--bg-surface); }
+.file-tab.active {
+  color: var(--text-pri);
+  background: var(--bg-void);
+  border-bottom: 2px solid var(--cyan);
+  padding-bottom: 2px;
+}
+.file-tab .tab-lang-dot {
+  width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+}
+.file-tab .tab-close {
+  width: 16px; height: 16px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 3px;
+  color: var(--text-muted);
+  font-size: 11px;
+  margin-left: 2px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.1s, background 0.1s, color 0.1s;
+}
+.file-tab:hover .tab-close { opacity: 1; }
+.file-tab .tab-close:hover { background: rgba(248,113,113,0.2); color: var(--red); }
+
+.tabs-add {
+  width: 32px; height: 32px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 16px;
+  flex-shrink: 0;
+  transition: color 0.12s;
+}
+.tabs-add:hover { color: var(--text-pri); }
+
+/* Monaco Editor */
+#editor-wrapper {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+#monaco-editor {
+  width: 100%;
+  height: 100%;
+}
+
+/* AI Action Toolbar — floating inside editor */
+#ai-toolbar {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-mid);
+  border-radius: 999px;
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  z-index: 20;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.ai-action-btn {
+  display: flex; align-items: center; gap: 5px;
+  padding: 5px 10px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-sec);
+  font-size: 11px;
+  font-weight: 500;
+  font-family: var(--font-ui);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.ai-action-btn:hover {
+  background: var(--cyan-dim);
+  color: var(--cyan);
+}
+.ai-action-btn.danger:hover { background: rgba(248,113,113,0.15); color: var(--red); }
+.ai-toolbar-sep { width: 1px; height: 16px; background: var(--border); flex-shrink: 0; }
+
+/* Diff Overlay */
+#diff-overlay {
+  position: absolute;
+  inset: 0;
+  background: var(--bg-void);
+  z-index: 30;
+  display: none;
+  flex-direction: column;
+}
+#diff-overlay.visible { display: flex; }
+#diff-header {
+  height: var(--tabs-h);
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  gap: 10px;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.diff-label { color: var(--text-muted); }
+.diff-filename { color: var(--text-pri); font-weight: 600; }
+.diff-actions { margin-left: auto; display: flex; gap: 6px; }
+.btn-accept {
+  display: flex; align-items: center; gap: 5px;
+  padding: 4px 12px;
+  background: rgba(52,211,153,0.15);
+  border: 1px solid rgba(52,211,153,0.3);
+  border-radius: var(--radius-sm);
+  color: var(--green);
+  font-size: 11px; font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font-ui);
+  transition: all 0.15s;
+}
+.btn-accept:hover { background: rgba(52,211,153,0.25); }
+.btn-reject {
+  display: flex; align-items: center; gap: 5px;
+  padding: 4px 12px;
+  background: rgba(248,113,113,0.12);
+  border: 1px solid rgba(248,113,113,0.25);
+  border-radius: var(--radius-sm);
+  color: var(--red);
+  font-size: 11px; font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font-ui);
+  transition: all 0.15s;
+}
+.btn-reject:hover { background: rgba(248,113,113,0.22); }
+#diff-editor { flex: 1; }
+
+/* ═══════════════════════════════════════════
+   CHAT PANEL (RIGHT)
+═══════════════════════════════════════════ */
+#chat-panel {
+  background: var(--bg-base);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#chat-header {
+  height: var(--tabs-h);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.chat-header-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-pri);
+  flex: 1;
+}
+.chat-model-tag {
+  font-size: 10px;
+  color: var(--cyan);
+  background: var(--cyan-dim);
+  border: 1px solid var(--border-act);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-weight: 500;
+  cursor: pointer;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-btn-clear {
+  width: 26px; height: 26px;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.12s;
+}
+.chat-btn-clear:hover { color: var(--red); background: rgba(248,113,113,0.1); }
+
+/* Messages */
+#chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--bg-raised) transparent;
+}
+#chat-messages::-webkit-scrollbar { width: 4px; }
+#chat-messages::-webkit-scrollbar-track { background: transparent; }
+#chat-messages::-webkit-scrollbar-thumb { background: var(--bg-raised); border-radius: 2px; }
+
+/* Welcome screen */
+#chat-welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  height: 100%;
+  padding: 24px;
+  text-align: center;
+  color: var(--text-muted);
+}
+.welcome-icon {
+  width: 40px; height: 40px;
+  background: var(--cyan-dim);
+  border: 1px solid var(--border-act);
+  border-radius: var(--radius-md);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+}
+.welcome-title { font-size: 13px; font-weight: 600; color: var(--text-sec); }
+.welcome-sub { font-size: 11px; line-height: 1.6; }
+.quick-chips {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  justify-content: center;
+  margin-top: 4px;
+}
+.quick-chip {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-mid);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 10px;
+  color: var(--text-sec);
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.quick-chip:hover { border-color: var(--border-act); color: var(--cyan); background: var(--cyan-glow); }
+
+/* Message bubbles */
+.msg {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  animation: msgIn 0.2s ease-out;
+}
+@keyframes msgIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.msg-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--text-muted);
+  padding: 0 4px;
+}
+.msg-avatar {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.msg-avatar.user { background: var(--purple); color: #fff; }
+.msg-avatar.ai { background: var(--cyan); color: #0a1628; }
+.msg-body {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--text-pri);
+  word-break: break-word;
+}
+.msg.user .msg-body {
+  background: var(--cyan-glow);
+  border-color: var(--border-act);
+}
+
+/* Code inside messages */
+.msg-body pre {
+  background: var(--bg-void);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  margin: 8px 0;
+  overflow-x: auto;
+  font-family: var(--font-code);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-code);
+  position: relative;
+}
+.msg-body pre .code-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 8px;
+  font-family: var(--font-ui);
+  color: var(--text-muted);
+  font-size: 10px;
+}
+.btn-insert-code {
+  background: var(--cyan-dim);
+  border: 1px solid var(--border-act);
+  border-radius: 4px;
+  color: var(--cyan);
+  font-size: 10px;
+  font-family: var(--font-ui);
+  padding: 2px 7px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.12s;
+}
+.btn-insert-code:hover { background: rgba(45,212,191,0.25); }
+
+/* ═══════════════════════════════════════════
+   AI EDITOR WRITE BAR
+═══════════════════════════════════════════ */
+#ai-write-bar {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 36px;
+  background: rgba(8,12,16,0.96);
+  border-bottom: 1px solid var(--border-act);
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 14px;
+  z-index: 80;
+  backdrop-filter: blur(8px);
+  transform: translateY(-100%);
+  transition: transform 0.18s ease;
+  pointer-events: none;
+}
+#ai-write-bar.visible {
+  transform: translateY(0);
+  pointer-events: all;
+}
+.ai-write-bar-label {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 11.5px; font-weight: 600;
+  color: var(--cyan);
+  flex: 1;
+}
+.ai-write-pulse {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--cyan);
+  animation: pulse-dot 1s ease-in-out infinite;
+  flex-shrink: 0;
+}
+@keyframes pulse-dot {
+  0%,100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: .4; transform: scale(0.6); }
+}
+.ai-write-tokens {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 60px;
+  text-align: right;
+}
+.ai-write-action-label {
+  font-size: 10px;
+  color: var(--text-sec);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 7px;
+}
+#ai-write-bar .bar-btn {
+  padding: 3px 10px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.12s;
+}
+#ai-write-bar .bar-btn.stop {
+  background: var(--bg-raised);
+  border-color: var(--border-mid);
+  color: var(--red);
+}
+#ai-write-bar .bar-btn.stop:hover { background: rgba(248,113,113,0.12); }
+#ai-write-bar .bar-btn.keep {
+  background: rgba(45,212,191,0.12);
+  border-color: var(--border-act);
+  color: var(--cyan);
+}
+#ai-write-bar .bar-btn.keep:hover { background: rgba(45,212,191,0.22); }
+#ai-write-bar .bar-btn.undo-btn {
+  background: var(--bg-raised);
+  border-color: var(--border-mid);
+  color: var(--text-sec);
+}
+#ai-write-bar .bar-btn.undo-btn:hover { background: var(--bg-card); }
+
+/* Editor wrapper needs relative position */
+#editor-area {
+  position: relative;
+  overflow: hidden;
+}
+
+/* Dim editor slightly while AI is writing */
+#editor-area.ai-writing #monaco-editor {
+  opacity: 0.85;
+  transition: opacity 0.2s;
+}
+.msg-thinking {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-style: italic;
+}
+
+/* Extended AI Reasoning block in chat */
+.msg-reasoning-block {
+  background: rgba(251,191,36,0.04);
+  border: 1px solid rgba(251,191,36,0.18);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  margin-bottom: 6px;
+  animation: msgIn 0.2s ease-out;
+}
+.msg-reasoning-header {
+  display: flex; align-items: center; gap: 7px;
+  padding: 7px 10px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 11px; font-weight: 600;
+  color: var(--yellow);
+  transition: background 0.12s;
+}
+.msg-reasoning-header:hover { background: rgba(251,191,36,0.06); }
+.msg-reasoning-header .th-icon { font-size: 13px; }
+.msg-reasoning-header .th-tokens {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+.msg-reasoning-header .th-toggle { font-size: 10px; transition: transform 0.2s; margin-left: 6px; }
+.msg-reasoning-header.collapsed .th-toggle { transform: rotate(-90deg); }
+.msg-reasoning-body {
+  padding: 8px 10px 10px;
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: var(--text-sec);
+  font-style: italic;
+  border-top: 1px solid rgba(251,191,36,0.1);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.msg-reasoning-body.hidden { display: none; }
+.thinking-dots { display: flex; gap: 4px; }
+.thinking-dots span {
+  width: 5px; height: 5px;
+  background: var(--cyan);
+  border-radius: 50%;
+  animation: dotBounce 1.2s infinite;
+}
+.thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+.thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes dotBounce {
+  0%, 80%, 100% { transform: scale(0.7); opacity: 0.4; }
+  40% { transform: scale(1); opacity: 1; }
+}
+
+/* Chat Input */
+#chat-input-area {
+  border-top: 1px solid var(--border);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+  background: var(--bg-base);
+}
+
+/* Context chip row */
+#context-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 22px;
+}
+.context-chip {
+  display: flex; align-items: center; gap: 5px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-act);
+  border-radius: 999px;
+  padding: 2px 8px 2px 6px;
+  font-size: 10px;
+  color: var(--cyan);
+  font-weight: 500;
+}
+.context-chip .ctx-remove {
+  cursor: pointer; color: var(--text-muted); font-size: 11px;
+  transition: color 0.1s;
+}
+.context-chip .ctx-remove:hover { color: var(--red); }
+.context-add-btn {
+  background: transparent;
+  border: 1px dashed var(--border-mid);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 10px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: var(--font-ui);
+  transition: all 0.12s;
+}
+.context-add-btn:hover { border-color: var(--border-act); color: var(--cyan); }
+
+.chat-input-box {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-mid);
+  border-radius: var(--radius-md);
+  padding: 6px 6px 6px 10px;
+  transition: border-color 0.15s;
+}
+.chat-input-box:focus-within { border-color: var(--border-act); }
+
+#chat-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-pri);
+  font-size: 12.5px;
+  font-family: var(--font-ui);
+  line-height: 1.5;
+  resize: none;
+  max-height: 120px;
+  min-height: 20px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--bg-raised) transparent;
+}
+#chat-input::placeholder { color: var(--text-muted); }
+
+.chat-send-btn {
+  width: 30px; height: 30px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--cyan);
+  border: none;
+  border-radius: var(--radius-sm);
+  color: #0a1628;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+.chat-send-btn:hover { background: #00d4be; transform: scale(1.05); }
+.chat-send-btn:disabled { background: var(--bg-raised); color: var(--text-muted); cursor: not-allowed; transform: none; }
+
+/* ═══════════════════════════════════════════
+   STATUS BAR
+═══════════════════════════════════════════ */
+#status-bar {
+  grid-column: 1 / -1;
+  height: var(--status-h);
+  background: var(--cyan);
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  gap: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #0a1628;
+}
+#status-bar .status-item {
+  display: flex; align-items: center; gap: 5px;
+  opacity: 0.85;
+}
+#status-bar .status-item:hover { opacity: 1; cursor: pointer; }
+.status-sep { opacity: 0.3; }
+#status-msg { margin-left: auto; font-style: italic; font-size: 10px; opacity: 0.75; }
+
+/* ═══════════════════════════════════════════
+   MODALS
+═══════════════════════════════════════════ */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.7);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex; align-items: center; justify-content: center;
+  animation: fadeIn 0.15s ease;
+}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.modal-overlay.hidden { display: none; }
+
+.modal {
+  background: var(--bg-raised);
+  border: 1px solid var(--border-mid);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  width: 480px;
+  max-width: 94vw;
+  max-height: 90vh;
+  overflow-y: auto;
+  animation: slideUp 0.2s ease;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.5);
+}
+@keyframes slideUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+
+.modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 20px;
+}
+.modal-title { font-size: 15px; font-weight: 700; color: var(--text-pri); }
+.modal-close {
+  width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.12s;
+}
+.modal-close:hover { border-color: var(--border-act); color: var(--text-pri); }
+
+/* Form Controls */
+.form-group { margin-bottom: 16px; }
+.form-label {
+  display: block;
+  font-size: 11px; font-weight: 600;
+  color: var(--text-sec);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+.form-input, .form-select, .form-textarea {
+  width: 100%;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-mid);
+  border-radius: var(--radius-sm);
+  color: var(--text-pri);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  padding: 8px 10px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.form-input:focus, .form-select:focus, .form-textarea:focus { border-color: var(--border-act); }
+.form-input[type="password"] { font-family: monospace; letter-spacing: 2px; }
+.form-hint { font-size: 10px; color: var(--text-muted); margin-top: 4px; }
+.form-select option { background: var(--bg-raised); color: var(--text-pri); }
+.form-textarea { resize: vertical; min-height: 70px; line-height: 1.5; }
+
+/* Provider Cards */
+.provider-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.provider-card {
+  background: var(--bg-surface);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.provider-card:hover { border-color: var(--border-mid); background: var(--bg-raised); }
+.provider-card.selected { border-color: var(--cyan); background: var(--cyan-glow); }
+.pc-icon { font-size: 18px; }
+.pc-name { font-size: 12px; font-weight: 600; color: var(--text-pri); }
+.pc-models { font-size: 10px; color: var(--text-muted); }
+
+.btn-primary {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  width: 100%;
+  background: var(--cyan);
+  color: #0a1628;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 9px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font-ui);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-primary:hover { background: #00d4be; transform: translateY(-1px); }
+
+/* New File Dialog */
+#new-file-modal .lang-grid {
+  display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px;
+}
+.lang-chip {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 11px; font-weight: 500;
+  color: var(--text-sec);
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.lang-chip:hover, .lang-chip.selected { border-color: var(--border-act); color: var(--cyan); background: var(--cyan-glow); }
+
+/* Toast */
+#toast-container {
+  position: fixed;
+  bottom: 36px; right: 16px;
+  z-index: 2000;
+  display: flex; flex-direction: column; gap: 6px;
+  pointer-events: none;
+}
+.toast {
+  background: var(--bg-raised);
+  border: 1px solid var(--border-mid);
+  border-radius: var(--radius-md);
+  padding: 9px 14px;
+  font-size: 12px;
+  color: var(--text-pri);
+  display: flex; align-items: center; gap: 8px;
+  animation: toastIn 0.2s ease;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+  max-width: 280px;
+}
+@keyframes toastIn { from { opacity:0; transform:translateX(20px); } to { opacity:1; transform:translateX(0); } }
+@keyframes toastOut { from { opacity:1; } to { opacity:0; transform:translateX(20px); } }
+.toast.success { border-color: rgba(52,211,153,0.35); }
+.toast.error { border-color: rgba(248,113,113,0.35); }
+.toast-icon { font-size: 14px; }
+
+/* Scrollbar global */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--bg-raised); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-mid); }
+
+/* Utility */
+.hidden { display: none !important; }
+
+/* ═══════════════════════════════════════════
+   PLANNING MODE — FULL PANEL
+═══════════════════════════════════════════ */
+
+/* Plan button in chat header */
+.btn-plan-mode {
+  display: flex; align-items: center; gap: 5px;
+  padding: 3px 9px;
+  background: transparent;
+  border: 1px solid var(--border-mid);
+  border-radius: 999px;
+  color: var(--text-sec);
+  font-size: 10px; font-weight: 600;
+  font-family: var(--font-ui);
+  cursor: pointer;
+  letter-spacing: 0.03em;
+  transition: all 0.15s;
+}
+.btn-plan-mode:hover { border-color: var(--purple); color: var(--purple); background: rgba(167,139,250,0.08); }
+.btn-plan-mode.active { border-color: var(--purple); color: var(--purple); background: rgba(167,139,250,0.12); }
+.btn-plan-mode .plan-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--purple);
+  animation: planPulse 2s infinite;
+}
+@keyframes planPulse { 0%,100%{opacity:1;} 50%{opacity:0.4;} }
+
+/* Planning panel overlays the chat panel */
+#plan-panel {
+  position: absolute;
+  inset: 0;
+  background: var(--bg-base);
+  display: flex;
+  flex-direction: column;
+  z-index: 40;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(12px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+#plan-panel.visible {
+  opacity: 1;
+  pointer-events: all;
+  transform: translateX(0);
+}
+
+/* Plan header */
+#plan-header {
+  height: var(--tabs-h);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  gap: 8px;
+  flex-shrink: 0;
+  background: var(--bg-base);
+}
+.plan-header-icon {
+  width: 22px; height: 22px;
+  background: rgba(167,139,250,0.15);
+  border: 1px solid rgba(167,139,250,0.3);
+  border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px;
+}
+.plan-header-title { font-size: 12px; font-weight: 700; color: var(--text-pri); flex: 1; }
+.plan-phase-badge {
+  font-size: 9px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  padding: 2px 7px; border-radius: 999px;
+  border: 1px solid;
+}
+.plan-phase-badge.thinking  { color: var(--yellow); border-color: rgba(251,191,36,0.4); background: rgba(251,191,36,0.08); }
+.plan-phase-badge.planning  { color: var(--purple); border-color: rgba(167,139,250,0.4); background: rgba(167,139,250,0.1); }
+.plan-phase-badge.executing { color: var(--cyan);   border-color: var(--border-act);    background: var(--cyan-glow); }
+.plan-phase-badge.done      { color: var(--green);  border-color: rgba(52,211,153,0.4); background: rgba(52,211,153,0.08); }
+.plan-phase-badge.idle      { color: var(--text-muted); border-color: var(--border); background: transparent; }
+
+#plan-close-btn {
+  width: 26px; height: 26px;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent; border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted); cursor: pointer; font-size: 13px;
+  transition: all 0.12s;
+}
+#plan-close-btn:hover { border-color: var(--border); color: var(--text-pri); }
+
+/* Plan progress stepper */
+#plan-stepper {
+  display: flex;
+  align-items: center;
+  padding: 10px 14px;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  background: var(--bg-surface);
+}
+.step-item {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 10px; font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  transition: color 0.2s;
+  white-space: nowrap;
+}
+.step-item.active { color: var(--purple); }
+.step-item.done   { color: var(--green); }
+.step-item.exec   { color: var(--cyan); }
+.step-num {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px; font-weight: 700;
+  flex-shrink: 0;
+  transition: all 0.2s;
+}
+.step-item.done .step-num { background: var(--green); border-color: var(--green); color: #0a1628; }
+.step-item.exec .step-num { background: var(--cyan);  border-color: var(--cyan);  color: #0a1628; }
+.step-line {
+  flex: 1; height: 1px;
+  background: var(--border);
+  margin: 0 6px;
+  min-width: 12px;
+}
+
+/* Plan conversation area */
+#plan-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--bg-raised) transparent;
+}
+#plan-messages::-webkit-scrollbar { width: 4px; }
+#plan-messages::-webkit-scrollbar-thumb { background: var(--bg-raised); border-radius: 2px; }
+
+/* Thinking block — AI's visible reasoning */
+.plan-thinking-block {
+  background: rgba(251,191,36,0.04);
+  border: 1px solid rgba(251,191,36,0.15);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  animation: msgIn 0.2s ease-out;
+}
+.plan-thinking-header {
+  display: flex; align-items: center; gap: 7px;
+  padding: 7px 10px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 11px; font-weight: 600;
+  color: var(--yellow);
+  transition: background 0.12s;
+}
+.plan-thinking-header:hover { background: rgba(251,191,36,0.05); }
+.plan-thinking-header .th-icon { font-size: 13px; }
+.plan-thinking-header .th-toggle { margin-left: auto; font-size: 10px; transition: transform 0.2s; }
+.plan-thinking-header.collapsed .th-toggle { transform: rotate(-90deg); }
+.plan-thinking-body {
+  padding: 0 10px 10px;
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: var(--text-sec);
+  font-style: italic;
+  border-top: 1px solid rgba(251,191,36,0.1);
+  padding-top: 8px;
+}
+.plan-thinking-body.hidden { display: none; }
+
+/* Plan card — structured plan output */
+.plan-card {
+  background: var(--bg-surface);
+  border: 1px solid rgba(167,139,250,0.25);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  animation: msgIn 0.2s ease-out;
+}
+.plan-card-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 12px;
+  border-bottom: 1px solid rgba(167,139,250,0.15);
+  background: rgba(167,139,250,0.05);
+}
+.plan-card-title { font-size: 12px; font-weight: 700; color: var(--text-pri); flex: 1; }
+.plan-card-meta  { font-size: 10px; color: var(--text-muted); }
+
+.plan-steps-list {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.plan-step-row {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 7px 9px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  font-size: 11.5px;
+  line-height: 1.5;
+  transition: all 0.15s;
+}
+.plan-step-row.active-step {
+  border-color: var(--border-act);
+  background: var(--cyan-glow);
+}
+.plan-step-row.done-step {
+  opacity: 0.6;
+  border-color: rgba(52,211,153,0.2);
+}
+.step-row-num {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: var(--bg-void);
+  border: 1.5px solid var(--border-mid);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px; font-weight: 700;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  margin-top: 1px;
+  transition: all 0.2s;
+}
+.plan-step-row.active-step .step-row-num {
+  background: var(--cyan); border-color: var(--cyan); color: #0a1628;
+}
+.plan-step-row.done-step .step-row-num {
+  background: var(--green); border-color: var(--green); color: #0a1628;
+}
+.step-row-text { flex: 1; color: var(--text-pri); }
+.step-row-status { font-size: 11px; color: var(--text-muted); flex-shrink: 0; }
+
+/* Execute button area */
+#plan-execute-row {
+  padding: 10px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+  background: var(--bg-base);
+}
+.btn-execute {
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 9px;
+  background: linear-gradient(135deg, var(--purple), #8b5cf6);
+  border: none; border-radius: var(--radius-sm);
+  color: #fff;
+  font-size: 12px; font-weight: 700;
+  font-family: var(--font-ui);
+  cursor: pointer;
+  letter-spacing: 0.02em;
+  transition: all 0.15s;
+  box-shadow: 0 4px 16px rgba(139,92,246,0.3);
+}
+.btn-execute:hover { transform: translateY(-1px); box-shadow: 0 6px 24px rgba(139,92,246,0.4); }
+.btn-execute:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+.btn-execute-cancel {
+  display: flex; align-items: center; justify-content: center;
+  padding: 6px;
+  background: transparent;
+  border: 1px solid var(--border-mid);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 11px; font-family: var(--font-ui);
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.btn-execute-cancel:hover { border-color: var(--red); color: var(--red); }
+
+/* Execution progress — live log */
+#exec-log {
+  background: var(--bg-void);
+  border: 1px solid var(--border-act);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-family: var(--font-code);
+  font-size: 10.5px;
+  line-height: 1.6;
+  color: var(--text-code);
+  max-height: 120px;
+  overflow-y: auto;
+  display: none;
+  scrollbar-width: thin;
+}
+#exec-log.visible { display: block; }
+.exec-log-line { padding: 1px 0; }
+.exec-log-line.step  { color: var(--cyan); }
+.exec-log-line.done  { color: var(--green); }
+.exec-log-line.err   { color: var(--red); }
+.exec-log-line.info  { color: var(--text-muted); }
+
+/* Plan input area */
+#plan-input-area {
+  border-top: 1px solid var(--border);
+  padding: 8px;
+  flex-shrink: 0;
+  background: var(--bg-base);
+}
+.plan-input-box {
+  display: flex; align-items: flex-end; gap: 6px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-mid);
+  border-radius: var(--radius-md);
+  padding: 6px 6px 6px 10px;
+  transition: border-color 0.15s;
+}
+.plan-input-box:focus-within { border-color: rgba(167,139,250,0.4); }
+#plan-input {
+  flex: 1; background: transparent; border: none; outline: none;
+  color: var(--text-pri); font-size: 12.5px; font-family: var(--font-ui);
+  line-height: 1.5; resize: none; max-height: 100px; min-height: 20px;
+  overflow-y: auto; scrollbar-width: thin;
+}
+#plan-input::placeholder { color: var(--text-muted); }
+.plan-send-btn {
+  width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(167,139,250,0.2);
+  border: 1px solid rgba(167,139,250,0.3);
+  border-radius: var(--radius-sm); color: var(--purple);
+  font-size: 12px; cursor: pointer; transition: all 0.15s;
+}
+.plan-send-btn:hover { background: rgba(167,139,250,0.35); transform: scale(1.05); }
+.plan-send-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+/* Plan user / AI messages */
+.plan-msg {
+  animation: msgIn 0.18s ease-out;
+}
+.plan-msg-body {
+  padding: 8px 11px;
+  border-radius: var(--radius-md);
+  font-size: 12px; line-height: 1.6;
+  word-break: break-word;
+}
+.plan-msg.user .plan-msg-body {
+  background: rgba(167,139,250,0.08);
+  border: 1px solid rgba(167,139,250,0.2);
+  color: var(--text-pri);
+}
+.plan-msg.ai .plan-msg-body {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--text-pri);
+}
+.plan-msg-meta {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 10px; color: var(--text-muted);
+  padding: 0 3px; margin-bottom: 3px;
+}
+.plan-avatar {
+  width: 16px; height: 16px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 8px; font-weight: 700;
+}
+.plan-avatar.user { background: var(--purple); color: #fff; }
+.plan-avatar.ai   { background: rgba(167,139,250,0.3); color: var(--purple); }
+
+/* Welcome plan screen */
+#plan-welcome {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; padding: 24px; text-align: center; height: 100%;
+  color: var(--text-muted);
+}
+.plan-welcome-icon {
+  width: 44px; height: 44px;
+  background: rgba(167,139,250,0.12);
+  border: 1px solid rgba(167,139,250,0.3);
+  border-radius: var(--radius-md);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px;
+}
+.plan-welcome-title { font-size: 13px; font-weight: 700; color: var(--text-sec); }
+.plan-welcome-sub { font-size: 11px; line-height: 1.6; max-width: 240px; }
+.plan-quick-chips { display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; margin-top: 4px; }
+.plan-quick-chip {
+  background: var(--bg-surface);
+  border: 1px solid rgba(167,139,250,0.2);
+  border-radius: 999px; padding: 3px 9px;
+  font-size: 10px; color: var(--text-sec); cursor: pointer;
+  transition: all 0.12s;
+}
+.plan-quick-chip:hover { border-color: rgba(167,139,250,0.5); color: var(--purple); background: rgba(167,139,250,0.08); }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ─── HEADER ─── -->
+  <header id="header">
+    <a class="logo" href="#" onclick="return false;">
+      <div class="logo-icon">⚡</div>
+      NexCode
+      <span class="logo-badge">AI</span>
+    </a>
+    <div class="header-sep"></div>
+
+    <!-- Project name -->
+    <span style="font-size:12px;color:var(--text-muted);" id="project-name">untitled-project</span>
+    <div class="header-flex"></div>
+
+    <div class="header-actions">
+      <!-- Provider pill -->
+      <div class="provider-pill" onclick="openProviderModal()" id="provider-pill">
+        <span class="provider-dot disconnected" id="conn-dot"></span>
+        <span id="pill-text">No Provider</span>
+        <span class="provider-arrow">▾</span>
+      </div>
+
+      <div class="header-sep"></div>
+
+      <button class="btn-icon" title="New File (Ctrl+N)" onclick="openNewFileModal()">＋</button>
+      <button class="btn-icon" title="Download File (Ctrl+S)" onclick="downloadActiveFile()">⬇</button>
+      <button class="btn-icon" title="Download All Files (Ctrl+Shift+S)" onclick="downloadAllFiles()">📦</button>
+      <button class="btn-icon" title="Settings (Ctrl+,)" onclick="openProviderModal()">⚙</button>
+      <button class="btn-run" onclick="runCode()">
+        <span>▶</span> Run
+      </button>
+    </div>
+  </header>
+
+  <!-- ─── ACTIVITY BAR ─── -->
+  <nav id="activity-bar">
+    <div class="ab-btn active" title="editor" onclick="setActivity('editor', this)">
+      <span>📄</span>
+      <span class="ab-btn-tooltip">Files</span>
+    </div>
+    <div class="ab-btn" onclick="setActivity('ai', this)">
+      <span>✨</span>
+      <span class="ab-btn-tooltip">AI Actions</span>
+    </div>
+    <div class="ab-btn" onclick="setActivity('history', this)">
+      <span>🕑</span>
+      <span class="ab-btn-tooltip">History</span>
+    </div>
+    <div class="ab-spacer"></div>
+    <div class="ab-btn" onclick="openProviderModal()">
+      <span>🔑</span>
+      <span class="ab-btn-tooltip">API Keys</span>
+    </div>
+  </nav>
+
+  <!-- ─── EDITOR AREA ─── -->
+  <main id="editor-area">
+    <!-- Tabs -->
+    <div id="file-tabs">
+      <!-- Populated by JS -->
+      <div class="tabs-add" onclick="openNewFileModal()">＋</div>
+    </div>
+
+    <!-- Monaco Editor -->
+    <div id="editor-wrapper">
+      <!-- AI Write Bar -->
+    <div id="ai-write-bar">
+      <div class="ai-write-pulse"></div>
+      <div class="ai-write-bar-label">
+        <span id="ai-write-action-label" class="ai-write-action-label">Writing…</span>
+        <span id="ai-write-status">AI is writing</span>
+      </div>
+      <span class="ai-write-tokens" id="ai-write-tokens">0 chars</span>
+      <button class="bar-btn stop" id="ai-write-stop" onclick="stopEditorWrite()">■ Stop</button>
+      <button class="bar-btn undo-btn" id="ai-write-undo" style="display:none" onclick="undoEditorWrite()">↩ Undo</button>
+      <button class="bar-btn keep" id="ai-write-keep" style="display:none" onclick="keepEditorWrite()">✓ Keep</button>
+    </div>
+    <div id="monaco-editor"></div>
+
+      <!-- AI Floating Toolbar -->
+      <div id="ai-toolbar">
+        <button class="ai-action-btn" onclick="aiAction('explain')">
+          💬 Explain
+        </button>
+        <button class="ai-action-btn" onclick="aiAction('fix')">
+          🐛 Fix Bug
+        </button>
+        <button class="ai-action-btn" onclick="aiAction('refactor')">
+          ⚡ Refactor
+        </button>
+        <button class="ai-action-btn" onclick="aiAction('comment')">
+          📝 Comment
+        </button>
+        <button class="ai-action-btn" onclick="aiAction('tests')">
+          🧪 Tests
+        </button>
+        <div class="ai-toolbar-sep"></div>
+        <button class="ai-action-btn" onclick="aiAction('complete')">
+          ✦ Complete
+        </button>
+      </div>
+    </div>
+
+    <!-- Diff Overlay -->
+    <div id="diff-overlay">
+      <div id="diff-header">
+        <span class="diff-label">AI Suggestion —</span>
+        <span class="diff-filename" id="diff-filename">file.js</span>
+        <div class="diff-actions">
+          <button class="btn-accept" onclick="acceptDiff()">✓ Accept Changes</button>
+          <button class="btn-reject" onclick="rejectDiff()">✕ Reject</button>
+          <button class="btn-icon" style="color:var(--text-sec);" title="Download suggested code" onclick="downloadDiffCode()">⬇</button>
+        </div>
+      </div>
+      <div id="diff-editor"></div>
+    </div>
+  </main>
+
+  <!-- ─── CHAT PANEL ─── -->
+  <aside id="chat-panel" style="position:relative;">
+    <div id="chat-header">
+      <span class="chat-header-title">AI Assistant</span>
+      <span class="chat-model-tag" id="chat-model-tag" onclick="openProviderModal()">No model</span>
+      <button class="btn-plan-mode" id="plan-mode-btn" onclick="openPlanMode()" title="Plan and Execute mode">&#10022; Plan</button>
+      <button class="chat-btn-clear" onclick="clearChat()" title="Clear chat">&#128465;</button>
+    </div>
+
+    <!-- PLANNING PANEL overlays chat -->
+    <div id="plan-panel">
+      <div id="plan-header">
+        <div class="plan-header-icon">&#129504;</div>
+        <span class="plan-header-title">Plan &amp; Execute</span>
+        <span class="plan-phase-badge idle" id="plan-phase-badge">Idle</span>
+        <button id="plan-close-btn" onclick="closePlanMode()">&#10005;</button>
+      </div>
+      <div id="plan-stepper">
+        <div class="step-item" id="step-think"><div class="step-num">1</div><span>Think</span></div>
+        <div class="step-line"></div>
+        <div class="step-item" id="step-plan"><div class="step-num">2</div><span>Plan</span></div>
+        <div class="step-line"></div>
+        <div class="step-item" id="step-review"><div class="step-num">3</div><span>Review</span></div>
+        <div class="step-line"></div>
+        <div class="step-item" id="step-exec"><div class="step-num">4</div><span>Execute</span></div>
+      </div>
+      <div id="plan-messages">
+        <div id="plan-welcome">
+          <div class="plan-welcome-icon">&#129504;</div>
+          <div class="plan-welcome-title">Plan before you build</div>
+          <div class="plan-welcome-sub">Describe what you want to build. I'll think it through with you, then execute when you're ready.</div>
+          <div class="plan-quick-chips">
+            <span class="plan-quick-chip" onclick="planQuick('Build a REST API with Express and JWT auth')">REST API + auth</span>
+            <span class="plan-quick-chip" onclick="planQuick('Create a React dashboard with charts')">React dashboard</span>
+            <span class="plan-quick-chip" onclick="planQuick('Write a Python async web scraper')">Python scraper</span>
+            <span class="plan-quick-chip" onclick="planQuick('Build a Node.js CLI tool')">CLI tool</span>
+            <span class="plan-quick-chip" onclick="planQuick('Refactor this codebase for better architecture')">Refactor code</span>
+          </div>
+        </div>
+      </div>
+      <div id="plan-execute-row" style="display:none;">
+        <div id="exec-log"></div>
+        <button class="btn-execute" id="execute-btn" onclick="executePlan()">&#9889; Execute Plan</button>
+        <button class="btn-execute-cancel" onclick="resetPlan()">&#8634; Start over</button>
+      </div>
+      <div id="plan-input-area">
+        <div class="plan-input-box">
+          <textarea id="plan-input" placeholder="Describe what you want to build..." rows="1"
+            onkeydown="handlePlanKey(event)" oninput="autoResize(this)"></textarea>
+          <button class="plan-send-btn" id="plan-send-btn" onclick="sendPlanMessage()">&#10148;</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="chat-messages">
+      <div id="chat-welcome">
+        <div class="welcome-icon">✦</div>
+        <div class="welcome-title">Ready to assist</div>
+        <div class="welcome-sub">Configure a provider to start chatting with AI about your code.</div>
+        <div class="quick-chips">
+          <span class="quick-chip" onclick="sendQuick('Explain this code')">Explain code</span>
+          <span class="quick-chip" onclick="sendQuick('Find bugs in my code')">Find bugs</span>
+          <span class="quick-chip" onclick="sendQuick('Refactor for readability')">Refactor</span>
+          <span class="quick-chip" onclick="sendQuick('Write tests for this')">Write tests</span>
+          <span class="quick-chip" onclick="sendQuick('Add JSDoc comments')">Add comments</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="chat-input-area">
+      <div id="context-row">
+        <button class="context-add-btn" onclick="addCodeContext()">+ Add code context</button>
+      </div>
+      <div class="chat-input-box">
+        <textarea id="chat-input"
+          placeholder="Ask anything about your code..."
+          rows="1"
+          onkeydown="handleChatKey(event)"
+          oninput="autoResize(this)"></textarea>
+        <button class="chat-send-btn" id="send-btn" onclick="sendChatMessage()">➤</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ─── STATUS BAR ─── -->
+  <footer id="status-bar">
+    <span class="status-item" onclick="openProviderModal()">
+      <span id="status-provider-icon">○</span>
+      <span id="status-provider">Not connected</span>
+    </span>
+    <span class="status-sep">│</span>
+    <span class="status-item" id="status-lang">JavaScript</span>
+    <span class="status-sep">│</span>
+    <span class="status-item" id="status-cursor">Ln 1, Col 1</span>
+    <span id="status-msg"></span>
+  </footer>
+</div>
+
+<!-- ═════════════════════════════════════════
+     PROVIDER / SETTINGS MODAL
+═════════════════════════════════════════ -->
+<div class="modal-overlay hidden" id="provider-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">AI Provider Settings</span>
+      <span class="modal-close" onclick="closeModal('provider-modal')">✕</span>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Choose Provider</label>
+      <div class="provider-grid" id="provider-grid">
+        <!-- Populated by JS -->
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">API Key</label>
+      <input type="password" class="form-input" id="api-key-input" placeholder="sk-...">
+      <p class="form-hint" id="api-key-hint">Key stored locally in your browser only.</p>
+    </div>
+
+    <div class="form-group" id="base-url-group">
+      <label class="form-label">Base URL <span style="color:var(--text-muted);text-transform:none;font-weight:400;">(optional)</span></label>
+      <input type="text" class="form-input" id="base-url-input" placeholder="https://api.openai.com/v1">
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Model</label>
+      <select class="form-select" id="model-select">
+        <!-- Populated dynamically -->
+      </select>
+    </div>
+
+    <div class="form-group" id="custom-model-group" style="display:none;">
+      <label class="form-label">Custom Model Name</label>
+      <input type="text" class="form-input" id="custom-model-input" placeholder="e.g. llama3:8b or gpt-4o-custom">
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">System Prompt <span style="color:var(--text-muted);text-transform:none;font-weight:400;">(optional)</span></label>
+      <textarea class="form-textarea" id="system-prompt-input" placeholder="You are an expert coding assistant..."></textarea>
+    </div>
+
+    <button class="btn-primary" onclick="saveProviderSettings()">
+      ✓ Save &amp; Connect
+    </button>
+  </div>
+</div>
+
+<!-- ═════════════════════════════════════════
+     NEW FILE MODAL
+═════════════════════════════════════════ -->
+<div class="modal-overlay hidden" id="new-file-modal">
+  <div class="modal" style="width:360px;">
+    <div class="modal-header">
+      <span class="modal-title">New File</span>
+      <span class="modal-close" onclick="closeModal('new-file-modal')">✕</span>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">File Name</label>
+      <input type="text" class="form-input" id="new-file-name" placeholder="main.js">
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Language</label>
+      <div class="lang-grid" id="lang-grid">
+        <!-- Populated by JS -->
+      </div>
+    </div>
+
+    <button class="btn-primary" onclick="createNewFile()">Create File</button>
+  </div>
+</div>
+
+<!-- Toast Container -->
+<div id="toast-container"></div>
+
+<!-- ═════════════════════════════════════════
+     JAVASCRIPT ENGINE
+═════════════════════════════════════════ -->
+<script>
+// Reset code store counter each page load
+window._codeIdx  = 0;
+window._codeStore = {};
+
+// ─────────────────────────────────────────
+//  PROVIDER DEFINITIONS
+// ─────────────────────────────────────────
+const PROVIDERS = {
+  openai: {
+    name: 'OpenAI',
+    icon: '🤖',
+    baseUrl: 'https://api.openai.com/v1',
+    models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'o3-mini', 'o1-mini'],
+    hint: 'Get your key at platform.openai.com',
+    needsKey: true,
+  },
+  anthropic: {
+    name: 'Anthropic',
+    icon: '✦',
+    baseUrl: 'https://api.anthropic.com/v1',
+    models: ['claude-opus-4-5', 'claude-sonnet-4-5', 'claude-haiku-4-5'],
+    hint: 'Get your key at console.anthropic.com',
+    needsKey: true,
+  },
+  gemini: {
+    name: 'Gemini',
+    icon: '💎',
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+    models: ['gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-1.5-pro'],
+    hint: 'Get your key at aistudio.google.com',
+    needsKey: true,
+  },
+  groq: {
+    name: 'Groq',
+    icon: '⚡',
+    baseUrl: 'https://api.groq.com/openai/v1',
+    models: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'],
+    hint: 'Get your key at console.groq.com',
+    needsKey: true,
+  },
+  deepseek: {
+    name: 'DeepSeek',
+    icon: '🌊',
+    baseUrl: 'https://api.deepseek.com/v1',
+    models: ['deepseek-chat', 'deepseek-coder', 'deepseek-reasoner'],
+    hint: 'Get your key at platform.deepseek.com',
+    needsKey: true,
+  },
+  openrouter: {
+    name: 'OpenRouter',
+    icon: '🔀',
+    baseUrl: 'https://openrouter.ai/api/v1',
+    models: ['anthropic/claude-opus-4', 'openai/gpt-4o', 'google/gemini-2.0-flash', 'meta-llama/llama-3.3-70b-instruct', 'deepseek/deepseek-coder'],
+    hint: 'Access 300+ models via openrouter.ai',
+    needsKey: true,
+  },
+  ollama: {
+    name: 'Ollama',
+    icon: '🦙',
+    baseUrl: 'http://localhost:11434/api',
+    models: ['llama3.2', 'codellama', 'qwen2.5-coder', 'deepseek-r1', 'custom'],
+    hint: 'Local models — run Ollama first at localhost:11434',
+    needsKey: false,
+  },
+  custom: {
+    name: 'Custom',
+    icon: '🛠',
+    baseUrl: '',
+    models: ['custom'],
+    hint: 'Enter any OpenAI-compatible endpoint',
+    needsKey: false,
+  },
+};
+
+const LANGUAGES = [
+  { id: 'javascript', label: 'JS', ext: '.js' },
+  { id: 'typescript', label: 'TS', ext: '.ts' },
+  { id: 'python', label: 'Py', ext: '.py' },
+  { id: 'html', label: 'HTML', ext: '.html' },
+  { id: 'css', label: 'CSS', ext: '.css' },
+  { id: 'json', label: 'JSON', ext: '.json' },
+  { id: 'rust', label: 'Rust', ext: '.rs' },
+  { id: 'go', label: 'Go', ext: '.go' },
+  { id: 'cpp', label: 'C++', ext: '.cpp' },
+  { id: 'java', label: 'Java', ext: '.java' },
+  { id: 'shell', label: 'Shell', ext: '.sh' },
+  { id: 'markdown', label: 'MD', ext: '.md' },
+];
+
+const LANG_COLORS = {
+  javascript: '#f7df1e', typescript: '#3178c6', python: '#3572A5',
+  html: '#e34c26', css: '#563d7c', json: '#292929', rust: '#dea584',
+  go: '#00ADD8', cpp: '#f34b7d', java: '#b07219', shell: '#89e051',
+  markdown: '#083fa1',
+};
+
+// ─────────────────────────────────────────
+//  STATE
+// ─────────────────────────────────────────
+let state = {
+  provider: null,
+  apiKey: '',
+  baseUrl: '',
+  model: '',
+  systemPrompt: '',
+  files: [],
+  activeFile: null,
+  chatHistory: [],
+  isStreaming: false,
+  selectedProvider: 'openai',
+  selectedLang: 'javascript',
+  codeContext: false,
+};
+
+let monacoEditor = null;
+let diffEditor = null;
+let originalCode = '';
+let currentDiffCode = '';
+
+// ─────────────────────────────────────────
+//  INIT
+// ─────────────────────────────────────────
+function init() {
+  loadSettings();
+  renderProviderGrid();
+  renderLangGrid();
+  createDefaultFile();
+  initMonaco();
+  updateProviderUI();
+}
+
+function loadSettings() {
+  const saved = localStorage.getItem('nexcode_settings');
+  if (saved) {
+    const s = JSON.parse(saved);
+    state.provider = s.provider || null;
+    state.apiKey = s.apiKey || '';
+    state.baseUrl = s.baseUrl || '';
+    state.model = s.model || '';
+    state.systemPrompt = s.systemPrompt || '';
+    state.selectedProvider = s.provider || 'openai';
+  }
+  const savedFiles = localStorage.getItem('nexcode_files');
+  if (savedFiles) {
+    state.files = JSON.parse(savedFiles);
+    state.activeFile = state.files[0]?.id || null;
+  }
+}
+
+function saveSettings() {
+  localStorage.setItem('nexcode_settings', JSON.stringify({
+    provider: state.provider,
+    apiKey: state.apiKey,
+    baseUrl: state.baseUrl,
+    model: state.model,
+    systemPrompt: state.systemPrompt,
+  }));
+}
+
+function saveFiles() {
+  localStorage.setItem('nexcode_files', JSON.stringify(state.files));
+}
+
+function createDefaultFile() {
+  if (state.files.length === 0) {
+    state.files.push({
+      id: Date.now().toString(),
+      name: 'main.js',
+      language: 'javascript',
+      content: `// Welcome to NexCode ⚡
+// Configure a provider in the top bar to use AI features.
+
+function greet(name) {
+  return \`Hello, \${name}! Ready to build something awesome?\`;
+}
+
+const message = greet('Developer');
+console.log(message);
+`,
+    });
+    state.activeFile = state.files[0].id;
+    saveFiles();
+  }
+}
+
+// ─────────────────────────────────────────
+//  MONACO EDITOR
+// ─────────────────────────────────────────
+function initMonaco() {
+  require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' } });
+  require(['vs/editor/editor.main'], function (monaco) {
+    window.monaco = monaco;
+
+    // Custom dark theme
+    monaco.editor.defineTheme('nexcode-dark', {
+      base: 'vs-dark',
+      inherit: true,
+      rules: [
+        { token: 'comment', foreground: '475569', fontStyle: 'italic' },
+        { token: 'keyword', foreground: '2dd4bf' },
+        { token: 'string', foreground: 'a5b4fc' },
+        { token: 'number', foreground: 'fb923c' },
+        { token: 'type', foreground: '34d399' },
+        { token: 'function', foreground: 'e2e8f0' },
+      ],
+      colors: {
+        'editor.background': '#080c10',
+        'editor.foreground': '#cdd9e5',
+        'editorLineNumber.foreground': '#2d3748',
+        'editorLineNumber.activeForeground': '#2dd4bf',
+        'editor.selectionBackground': '#2dd4bf22',
+        'editor.lineHighlightBackground': '#0d111700',
+        'editorCursor.foreground': '#2dd4bf',
+        'editor.inactiveSelectionBackground': '#2dd4bf11',
+        'editorWidget.background': '#111820',
+        'editorSuggestWidget.background': '#111820',
+        'editorSuggestWidget.border': '#1e2d3d',
+        'editorSuggestWidget.selectedBackground': '#2dd4bf15',
+        'inputOption.activeBorder': '#2dd4bf',
+        'focusBorder': '#2dd4bf',
+      }
+    });
+
+    const activeFile = getActiveFile();
+    monacoEditor = monaco.editor.create(document.getElementById('monaco-editor'), {
+      value: activeFile?.content || '',
+      language: activeFile?.language || 'javascript',
+      theme: 'nexcode-dark',
+      fontSize: 13,
+      fontFamily: "'JetBrains Mono', monospace",
+      fontLigatures: true,
+      lineHeight: 22,
+      letterSpacing: 0.3,
+      minimap: { enabled: true, scale: 1, renderCharacters: false },
+      scrollBeyondLastLine: false,
+      renderWhitespace: 'selection',
+      smoothScrolling: true,
+      cursorSmoothCaretAnimation: 'on',
+      cursorBlinking: 'phase',
+      bracketPairColorization: { enabled: true },
+      guides: { bracketPairs: true },
+      padding: { top: 16, bottom: 32 },
+      suggest: { showIcons: true },
+      wordWrap: 'off',
+      tabSize: 2,
+      insertSpaces: true,
+      automaticLayout: true,
+    });
+
+    // Track cursor position
+    monacoEditor.onDidChangeCursorPosition(e => {
+      document.getElementById('status-cursor').textContent =
+        `Ln ${e.position.lineNumber}, Col ${e.position.column}`;
+    });
+
+    // Auto-save
+    monacoEditor.onDidChangeModelContent(() => {
+      const f = getActiveFile();
+      if (f) {
+        f.content = monacoEditor.getValue();
+        saveFiles();
+      }
+    });
+
+    renderTabs();
+  });
+}
+
+// ─────────────────────────────────────────
+//  FILES & TABS
+// ─────────────────────────────────────────
+function getActiveFile() {
+  return state.files.find(f => f.id === state.activeFile);
+}
+
+function switchToFile(id) {
+  if (monacoEditor && state.activeFile) {
+    const cur = getActiveFile();
+    if (cur) cur.content = monacoEditor.getValue();
+  }
+  state.activeFile = id;
+  const file = state.files.find(f => f.id === id);
+  if (file && monacoEditor && window.monaco) {
+    const model = monaco.editor.createModel(file.content, file.language);
+    monacoEditor.setModel(model);
+    document.getElementById('status-lang').textContent =
+      LANGUAGES.find(l => l.id === file.language)?.label || file.language;
+    document.getElementById('diff-filename').textContent = file.name;
+  }
+  renderTabs();
+}
+
+function closeFile(id, e) {
+  e.stopPropagation();
+  state.files = state.files.filter(f => f.id !== id);
+  if (state.activeFile === id) {
+    state.activeFile = state.files[0]?.id || null;
+    if (state.activeFile) switchToFile(state.activeFile);
+    else if (monacoEditor) monacoEditor.setValue('');
+  }
+  saveFiles();
+  renderTabs();
+}
+
+function renderTabs() {
+  const container = document.getElementById('file-tabs');
+  const addBtn = container.querySelector('.tabs-add');
+
+  // Remove old tabs
+  container.querySelectorAll('.file-tab').forEach(t => t.remove());
+
+  state.files.forEach(file => {
+    const lang = LANGUAGES.find(l => l.id === file.language);
+    const color = LANG_COLORS[file.language] || '#94a3b8';
+    const tab = document.createElement('div');
+    tab.className = 'file-tab' + (file.id === state.activeFile ? ' active' : '');
+    tab.innerHTML = `
+      <span class="tab-lang-dot" style="background:${color}"></span>
+      <span>${file.name}</span>
+      <span class="tab-close" onclick="closeFile('${file.id}', event)">×</span>
+    `;
+    tab.onclick = () => switchToFile(file.id);
+    container.insertBefore(tab, addBtn);
+  });
+}
+
+// ─────────────────────────────────────────
+//  NEW FILE MODAL
+// ─────────────────────────────────────────
+function renderLangGrid() {
+  const grid = document.getElementById('lang-grid');
+  grid.innerHTML = LANGUAGES.map(l => `
+    <span class="lang-chip ${l.id === state.selectedLang ? 'selected' : ''}"
+      onclick="selectLang('${l.id}')">${l.label}</span>
+  `).join('');
+}
+
+function selectLang(id) {
+  state.selectedLang = id;
+  renderLangGrid();
+  const input = document.getElementById('new-file-name');
+  const ext = LANGUAGES.find(l => l.id === id)?.ext || '';
+  const cur = input.value;
+  const base = cur.includes('.') ? cur.split('.').slice(0, -1).join('.') : cur;
+  if (base) input.value = base + ext;
+}
+
+function openNewFileModal() {
+  document.getElementById('new-file-name').value = 'untitled' + (LANGUAGES.find(l => l.id === state.selectedLang)?.ext || '.js');
+  openModal('new-file-modal');
+}
+
+function createNewFile() {
+  const name = document.getElementById('new-file-name').value.trim();
+  if (!name) { showToast('Enter a file name', 'error'); return; }
+  const file = {
+    id: Date.now().toString(),
+    name,
+    language: state.selectedLang,
+    content: getTemplateFor(state.selectedLang, name),
+  };
+  state.files.push(file);
+  saveFiles();
+  closeModal('new-file-modal');
+  switchToFile(file.id);
+  showToast(`Created ${name}`, 'success');
+}
+
+function getTemplateFor(lang, name) {
+  const templates = {
+    javascript: `// ${name}\n\n`,
+    typescript: `// ${name}\n\n`,
+    python: `# ${name}\n\n`,
+    html: `<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <title>Document</title>\n</head>\n<body>\n  \n</body>\n</html>`,
+    css: `/* ${name} */\n\n`,
+    json: `{\n  \n}`,
+    rust: `// ${name}\n\nfn main() {\n    println!("Hello!");\n}\n`,
+    go: `package main\n\nimport "fmt"\n\nfunc main() {\n    fmt.Println("Hello!")\n}\n`,
+    cpp: `// ${name}\n#include <iostream>\nusing namespace std;\n\nint main() {\n    cout << "Hello!" << endl;\n    return 0;\n}\n`,
+    java: `// ${name}\npublic class Main {\n    public static void main(String[] args) {\n        System.out.println("Hello!");\n    }\n}\n`,
+    shell: `#!/bin/bash\n# ${name}\n\n`,
+    markdown: `# ${name.replace(/\.md$/, '')}\n\n`,
+  };
+  return templates[lang] || `// ${name}\n\n`;
+}
+
+// ─────────────────────────────────────────
+//  PROVIDER MODAL
+// ─────────────────────────────────────────
+function renderProviderGrid() {
+  const grid = document.getElementById('provider-grid');
+  grid.innerHTML = Object.entries(PROVIDERS).map(([id, p]) => `
+    <div class="provider-card ${id === state.selectedProvider ? 'selected' : ''}"
+      onclick="selectProvider('${id}')">
+      <span class="pc-icon">${p.icon}</span>
+      <span class="pc-name">${p.name}</span>
+      <span class="pc-models">${p.models.slice(0,2).join(', ')}</span>
+    </div>
+  `).join('');
+}
+
+function selectProvider(id) {
+  state.selectedProvider = id;
+  renderProviderGrid();
+  const p = PROVIDERS[id];
+
+  // Update model dropdown
+  const sel = document.getElementById('model-select');
+  sel.innerHTML = p.models.map(m => `<option value="${m}">${m}</option>`).join('');
+  if (state.provider === id && state.model) sel.value = state.model;
+
+  // Show/hide custom model input
+  const hasCust = p.models.includes('custom');
+  document.getElementById('custom-model-group').style.display = hasCust ? 'block' : 'none';
+
+  // Base URL
+  const urlInput = document.getElementById('base-url-input');
+  urlInput.value = state.provider === id && state.baseUrl ? state.baseUrl : p.baseUrl;
+  document.getElementById('base-url-group').style.display =
+    (id === 'ollama' || id === 'custom') ? 'block' : 'block'; // always show
+
+  // API key hint
+  document.getElementById('api-key-hint').textContent = p.hint;
+
+  // Pre-fill key if switching back to same provider
+  if (state.provider === id) {
+    document.getElementById('api-key-input').value = state.apiKey ? '••••••••••••••••' : '';
+  } else {
+    document.getElementById('api-key-input').value = '';
+  }
+}
+
+function openProviderModal() {
+  renderProviderGrid();
+  state.selectedProvider = state.provider || 'openai';
+  selectProvider(state.selectedProvider);
+  if (state.systemPrompt) document.getElementById('system-prompt-input').value = state.systemPrompt;
+  openModal('provider-modal');
+}
+
+function saveProviderSettings() {
+  const id = state.selectedProvider;
+  const keyInput = document.getElementById('api-key-input').value;
+  const baseUrl = document.getElementById('base-url-input').value.trim();
+  let model = document.getElementById('model-select').value;
+  const customModel = document.getElementById('custom-model-input').value.trim();
+  const sysPrompt = document.getElementById('system-prompt-input').value.trim();
+
+  if (model === 'custom' && customModel) model = customModel;
+
+  if (PROVIDERS[id].needsKey && (!keyInput || keyInput === '••••••••••••••••')) {
+    if (!state.apiKey) { showToast('API key is required', 'error'); return; }
+  } else if (keyInput && keyInput !== '••••••••••••••••') {
+    state.apiKey = keyInput;
+  }
+
+  state.provider = id;
+  state.baseUrl = baseUrl || PROVIDERS[id].baseUrl;
+  state.model = model;
+  state.systemPrompt = sysPrompt;
+
+  saveSettings();
+  updateProviderUI();
+  closeModal('provider-modal');
+  showToast(`Connected to ${PROVIDERS[id].name} · ${model}`, 'success');
+}
+
+function updateProviderUI() {
+  const connected = !!state.provider;
+  const p = connected ? PROVIDERS[state.provider] : null;
+  const label = connected ? `${p.name} · ${state.model}` : 'No Provider';
+
+  document.getElementById('pill-text').textContent = label;
+  document.getElementById('conn-dot').className = 'provider-dot' + (connected ? '' : ' disconnected');
+  document.getElementById('chat-model-tag').textContent = connected ? state.model : 'No model';
+  document.getElementById('status-provider').textContent = connected ? `${p.name}` : 'Not connected';
+  document.getElementById('status-provider-icon').textContent = connected ? '●' : '○';
+}
+
+// ─────────────────────────────────────────
+//  AI CHAT
+// ─────────────────────────────────────────
+async function sendChatMessage() {
+  const input = document.getElementById('chat-input');
+  const msg = input.value.trim();
+  if (!msg) return;
+  input.value = '';
+  autoResize(input);
+  await chat(msg);
+}
+
+async function sendQuick(text) {
+  await chat(text);
+}
+
+function handleChatKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendChatMessage();
+  }
+}
+
+async function chat(userMsg, systemOverride) {
+  if (!state.provider) {
+    openProviderModal();
+    showToast('Configure a provider first', 'error');
+    return;
+  }
+  if (state.isStreaming) return;
+
+  document.getElementById('chat-welcome').style.display = 'none';
+
+  // Inject code context if attached
+  let fullMsg = userMsg;
+  if (state.codeContext) {
+    const file = getActiveFile();
+    const code = monacoEditor?.getValue() || '';
+    if (code.trim()) {
+      fullMsg = `${userMsg}\n\nCode context (${file?.name || 'file'}):\n\`\`\`${file?.language || 'code'}\n${code}\n\`\`\``;
+    }
+    removeContext();
+  }
+
+  appendMessage('user', userMsg);
+  state.chatHistory.push({ role: 'user', content: fullMsg });
+
+  state.isStreaming = true;
+  document.getElementById('send-btn').disabled = true;
+
+  // ── Build streaming message bubble ──
+  const { wrapper, thinkHeader, thinkBody, thinkTokenEl, msgBody, stopCursor } =
+    _createStreamingBubble();
+
+  let thinkText   = '';
+  let responseText = '';
+  let thinkVisible = false;
+  let thinkCount   = 0;
+
+  const onChunk = (chunk, isThinking) => {
+    if (isThinking) {
+      // Show/expand thinking block on first thinking chunk
+      if (!thinkVisible) {
+        wrapper.insertBefore(
+          wrapper.querySelector('.msg-reasoning-block'),
+          wrapper.querySelector('.msg')
+        );
+        wrapper.querySelector('.msg-reasoning-block').style.display = 'block';
+        thinkVisible = true;
+      }
+      thinkText += chunk;
+      thinkCount += chunk.length;
+      thinkBody.textContent = thinkText;
+      thinkTokenEl.textContent = thinkCount + ' chars';
+      thinkBody.parentElement.scrollTop = thinkBody.scrollHeight;
+    } else {
+      responseText += chunk;
+      // Re-render markdown on every chunk (debounced via requestAnimationFrame)
+      _scheduleRender(msgBody, responseText);
+    }
+    // Auto-scroll chat
+    const container = document.getElementById('chat-messages');
+    container.scrollTop = container.scrollHeight;
+  };
+
+  try {
+    const fullResponse = await callAI(state.chatHistory, systemOverride, onChunk);
+    // Final render — complete markdown with code blocks + Insert buttons
+    msgBody.innerHTML = renderMsgContent(responseText || fullResponse.replace(/<think>[\s\S]*?<\/think>/gi, '').trim());
+
+    // Collapse thinking block when done
+    if (thinkVisible) {
+      thinkHeader.classList.add('collapsed');
+      thinkBody.classList.add('hidden');
+      thinkTokenEl.textContent = thinkCount + ' chars  ·  done';
+    }
+    if (stopCursor) stopCursor();
+
+    const cleanResp = fullResponse.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+    state.chatHistory.push({ role: 'assistant', content: cleanResp });
+  } catch (err) {
+    msgBody.innerHTML = `<span style="color:var(--red)">❌ ${escHtml(err.message)}</span>`;
+  } finally {
+    state.isStreaming = false;
+    document.getElementById('send-btn').disabled = false;
+    _renderFrame = null;
+  }
+}
+
+// ─────────────────────────────────────────
+//  SYSTEM PROMPT
+// ─────────────────────────────────────────
+function buildSysPrompt(override) {
+  return override || state.systemPrompt ||
+    `You are NexCode, an elite AI coding assistant embedded in a professional IDE.
+
+CODE FORMATTING RULES (always follow):
+- Always wrap code in fenced code blocks with the language tag: \`\`\`javascript ... \`\`\`
+- Use consistent 2-space indentation for JS/TS/HTML/CSS, 4-space for Python/Java/C++
+- Add a single blank line between logical sections (imports, constants, functions, exports)
+- Group imports at the top: stdlib → third-party → local
+- Add a brief comment at the top of each function explaining its purpose
+- Prefer modern syntax: const/let over var, arrow functions, async/await over .then()
+- Never truncate code with "// ... rest of code ..."
+
+RESPONSE STYLE:
+- Lead with the code, explain briefly after
+- For bug fixes: corrected code first, then a brief diff summary
+- For refactors: show the full rewritten code, not partial snippets`;
+}
+
+// ─────────────────────────────────────────
+//  STREAMING ENGINE
+// ─────────────────────────────────────────
+
+// Main entry — always streams, calls onChunk(text, isThinking) per token,
+// returns the full final text when done.
+async function callAI(history, systemOverride, onChunk) {
+  const provider = state.provider;
+  const sysPrompt = buildSysPrompt(systemOverride);
+  const cb = onChunk || (() => {});
+
+  if (provider === 'anthropic')  return _streamAnthropic(history, sysPrompt, cb);
+  if (provider === 'gemini')     return _streamGemini(history, sysPrompt, cb);
+  if (provider === 'ollama')     return _streamOllama(history, sysPrompt, cb);
+  return _streamOpenAICompat(history, sysPrompt, cb);
+}
+
+// ── SSE line reader helper ────────────────
+async function* _readSSE(response) {
+  const reader  = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    const lines = buf.split('\n');
+    buf = lines.pop(); // keep incomplete last line
+    for (const line of lines) yield line;
+  }
+  if (buf) yield buf;
+}
+
+// ── OpenAI-compatible (OpenAI / Groq / DeepSeek / OpenRouter / Custom) ──
+async function _streamOpenAICompat(history, sysPrompt, onChunk) {
+  const p   = PROVIDERS[state.provider];
+  const url = `${state.baseUrl || p.baseUrl}/chat/completions`;
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${state.apiKey}`,
+      ...(state.provider === 'openrouter'
+        ? { 'HTTP-Referer': 'https://nexcode.dev', 'X-Title': 'NexCode' }
+        : {}),
+    },
+    body: JSON.stringify({
+      model: state.model,
+      messages: [{ role: 'system', content: sysPrompt }, ...history],
+      temperature: 0.3,
+      max_tokens: 4096,
+      stream: true,
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error?.message || `HTTP ${res.status}`);
+  }
+
+  let full = '';
+  let inThink = false;
+  let thinkBuf = '';
+
+  for await (const line of _readSSE(res)) {
+    if (!line.startsWith('data:')) continue;
+    const raw = line.slice(5).trim();
+    if (raw === '[DONE]') break;
+    let parsed;
+    try { parsed = JSON.parse(raw); } catch { continue; }
+
+    const delta = parsed.choices?.[0]?.delta;
+    if (!delta) continue;
+
+    // DeepSeek-R1 sends reasoning in delta.reasoning_content
+    if (delta.reasoning_content) {
+      onChunk(delta.reasoning_content, true);
+      thinkBuf += delta.reasoning_content;
+      continue;
+    }
+
+    const chunk = delta.content || '';
+    if (!chunk) continue;
+
+    // Some models embed <think> tags inline
+    let remaining = chunk;
+    while (remaining.length > 0) {
+      if (inThink) {
+        const end = remaining.indexOf('</think>');
+        if (end === -1) {
+          thinkBuf += remaining;
+          onChunk(remaining, true);
+          remaining = '';
+        } else {
+          thinkBuf += remaining.slice(0, end);
+          onChunk(remaining.slice(0, end), true);
+          remaining = remaining.slice(end + 8);
+          inThink = false;
+        }
+      } else {
+        const start = remaining.indexOf('<think>');
+        if (start === -1) {
+          full += remaining;
+          onChunk(remaining, false);
+          remaining = '';
+        } else {
+          const before = remaining.slice(0, start);
+          if (before) { full += before; onChunk(before, false); }
+          remaining = remaining.slice(start + 7);
+          inThink = true;
+        }
+      }
+    }
+  }
+
+  // Reconstruct with think wrapper so appendMessage can parse it
+  return thinkBuf ? `<think>${thinkBuf}</think>${full}` : full;
+}
+
+// ── Anthropic — with interleaved extended thinking ──
+async function _streamAnthropic(history, sysPrompt, onChunk) {
+  const useThinking = state.model.includes('claude-3-7') || state.model.includes('claude-opus-4');
+
+  const body = {
+    model: state.model,
+    max_tokens: 8000,
+    system: sysPrompt,
+    messages: history,
+    stream: true,
+  };
+
+  if (useThinking) {
+    body.thinking = { type: 'enabled', budget_tokens: 3000 };
+  }
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': state.apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+      ...(useThinking ? { 'anthropic-beta': 'interleaved-thinking-2025-05-14' } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error?.message || `HTTP ${res.status}`);
+  }
+
+  let full = '';
+  let thinkBuf = '';
+  let currentBlockType = 'text'; // 'text' | 'thinking'
+
+  for await (const line of _readSSE(res)) {
+    if (!line.startsWith('data:')) continue;
+    const raw = line.slice(5).trim();
+    let evt;
+    try { evt = JSON.parse(raw); } catch { continue; }
+
+    if (evt.type === 'content_block_start') {
+      currentBlockType = evt.content_block?.type === 'thinking' ? 'thinking' : 'text';
+    } else if (evt.type === 'content_block_delta') {
+      const delta = evt.delta;
+      if (delta?.type === 'thinking_delta') {
+        const t = delta.thinking || '';
+        thinkBuf += t;
+        onChunk(t, true);
+      } else if (delta?.type === 'text_delta') {
+        const t = delta.text || '';
+        full += t;
+        onChunk(t, false);
+      }
+    }
+  }
+
+  return thinkBuf ? `<think>${thinkBuf}</think>${full}` : full;
+}
+
+// ── Gemini streaming ──
+async function _streamGemini(history, sysPrompt, onChunk) {
+  const base  = state.baseUrl || PROVIDERS.gemini.baseUrl;
+  const url   = `${base}/models/${state.model}:streamGenerateContent?alt=sse&key=${state.apiKey}`;
+
+  const contents = history.map(m => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: m.content }],
+  }));
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      system_instruction: { parts: [{ text: sysPrompt }] },
+      contents,
+      generationConfig: { temperature: 0.3, maxOutputTokens: 4096 },
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error?.message || `HTTP ${res.status}`);
+  }
+
+  let full = '';
+  for await (const line of _readSSE(res)) {
+    if (!line.startsWith('data:')) continue;
+    let parsed;
+    try { parsed = JSON.parse(line.slice(5).trim()); } catch { continue; }
+    const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    if (text) { full += text; onChunk(text, false); }
+  }
+
+  return full;
+}
+
+// ── Ollama streaming ──
+async function _streamOllama(history, sysPrompt, onChunk) {
+  const base = state.baseUrl || PROVIDERS.ollama.baseUrl;
+
+  const res = await fetch(`${base}/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: state.model,
+      messages: [{ role: 'system', content: sysPrompt }, ...history],
+      stream: true,
+    }),
+  });
+
+  if (!res.ok) throw new Error(`Ollama error: HTTP ${res.status}. Make sure Ollama is running.`);
+
+  const reader  = res.body.getReader();
+  const decoder = new TextDecoder();
+  let full = '';
+  let buf  = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    const lines = buf.split('\n');
+    buf = lines.pop();
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      let parsed;
+      try { parsed = JSON.parse(line); } catch { continue; }
+      const chunk = parsed.message?.content || '';
+      if (chunk) { full += chunk; onChunk(chunk, false); }
+      if (parsed.done) break;
+    }
+  }
+
+  return full;
+}
+
+// ─────────────────────────────────────────
+//  AI EDITOR WRITE — streams code directly into Monaco
+// ─────────────────────────────────────────
+
+let _editorWriteAbort  = null; // AbortController
+let _editorWriteOriginal = '';  // snapshot before write (for undo)
+let _editorWriteDone   = false;
+
+function _showWriteBar(actionLabel) {
+  document.getElementById('ai-write-action-label').textContent = actionLabel;
+  document.getElementById('ai-write-status').textContent = 'AI is writing';
+  document.getElementById('ai-write-tokens').textContent = '0 chars';
+  document.getElementById('ai-write-stop').style.display = '';
+  document.getElementById('ai-write-undo').style.display = 'none';
+  document.getElementById('ai-write-keep').style.display = 'none';
+  document.getElementById('ai-write-bar').classList.add('visible');
+  document.getElementById('editor-area').classList.add('ai-writing');
+}
+
+function _finishWriteBar(charCount) {
+  document.getElementById('ai-write-status').textContent = 'Done — review changes';
+  document.getElementById('ai-write-tokens').textContent = charCount + ' chars';
+  document.getElementById('ai-write-stop').style.display = 'none';
+  document.getElementById('ai-write-undo').style.display = '';
+  document.getElementById('ai-write-keep').style.display = '';
+  document.getElementById('editor-area').classList.remove('ai-writing');
+}
+
+function _hideWriteBar() {
+  document.getElementById('ai-write-bar').classList.remove('visible');
+  document.getElementById('editor-area').classList.remove('ai-writing');
+}
+
+function stopEditorWrite() {
+  if (_editorWriteAbort) { _editorWriteAbort.abort(); _editorWriteAbort = null; }
+  _finishWriteBar(monacoEditor ? monacoEditor.getValue().length : 0);
+  state.isStreaming = false;
+  document.getElementById('send-btn').disabled = false;
+}
+
+function undoEditorWrite() {
+  if (monacoEditor && _editorWriteOriginal !== null) {
+    monacoEditor.setValue(_editorWriteOriginal);
+    const f = getActiveFile();
+    if (f) { f.content = _editorWriteOriginal; saveFiles(); }
+    showToast('Reverted to original', 'info');
+  }
+  _hideWriteBar();
+}
+
+function keepEditorWrite() {
+  const f = getActiveFile();
+  if (f && monacoEditor) { f.content = monacoEditor.getValue(); saveFiles(); }
+  showToast('Changes kept ✓', 'success');
+  _hideWriteBar();
+}
+
+// Core: clear editor and type the AI output char-by-char into Monaco
+async function writeToEditor(prompt, actionLabel, systemOverride) {
+  if (!monacoEditor || !window.monaco) { showToast('Editor not ready', 'error'); return; }
+  if (state.isStreaming) return;
+
+  state.isStreaming = true;
+  document.getElementById('send-btn').disabled = true;
+  _editorWriteDone = false;
+
+  // Snapshot for undo
+  _editorWriteOriginal = monacoEditor.getValue();
+
+  // Clear editor and start writing
+  monacoEditor.setValue('');
+  monacoEditor.setScrollPosition({ scrollTop: 0 });
+
+  _showWriteBar(actionLabel);
+
+  // Buffer that holds the complete text received so far
+  let fullText  = '';
+  let thinkBuf  = '';
+  let charCount = 0;
+
+  // We write chunks directly using pushEditOperations for smooth insertion
+  const model = monacoEditor.getModel();
+
+  const writeChunk = (chunk) => {
+    if (!model) return;
+    const totalLines = model.getLineCount();
+    const lastLine   = model.getLineMaxColumn(totalLines);
+    const range = new window.monaco.Range(totalLines, lastLine, totalLines, lastLine);
+    model.pushEditOperations([], [{ range, text: chunk, forceMoveMarkers: true }], () => null);
+    // Move cursor to end
+    const newLineCount = model.getLineCount();
+    monacoEditor.setPosition({ lineNumber: newLineCount, column: model.getLineMaxColumn(newLineCount) });
+    monacoEditor.revealPosition({ lineNumber: newLineCount, column: 1 }, 1 /* smooth */);
+    charCount += chunk.length;
+    document.getElementById('ai-write-tokens').textContent = charCount + ' chars';
+  };
+
+  // Extract only the code content from a response (strip prose, keep code block body)
+  const extractCode = (text) => {
+    const m = text.match(/```(?:\w+)?\n?([\s\S]*?)```/);
+    return m ? m[1] : text; // fallback: return as-is if no code block
+  };
+
+  // Streaming callback — buffer the stream, detect code block boundaries
+  let inCodeBlock = false;
+  let headerBuf   = '';  // collect ``` header line
+  let pendingBuf  = '';  // holds chars before we confirm we're in a code block
+
+  const onChunk = (chunk, isThinking) => {
+    if (isThinking) {
+      thinkBuf += chunk;
+      // Show thinking in write bar status
+      document.getElementById('ai-write-status').textContent =
+        '💭 ' + thinkBuf.slice(-60).replace(/\n/g, ' ');
+      return;
+    }
+
+    fullText += chunk;
+
+    // Process char by char to detect ``` fence opening/closing
+    for (const char of chunk) {
+      if (!inCodeBlock) {
+        pendingBuf += char;
+        // Look for ``` opening fence
+        if (pendingBuf.includes('```')) {
+          const fenceIdx = pendingBuf.indexOf('```');
+          const afterFence = pendingBuf.slice(fenceIdx + 3);
+          // Wait for newline after the language tag
+          const nlIdx = afterFence.indexOf('\n');
+          if (nlIdx !== -1) {
+            // We have the full header line — enter code block mode
+            inCodeBlock = true;
+            headerBuf = afterFence.slice(0, nlIdx); // e.g. "javascript"
+            // Update bar label with language
+            if (headerBuf.trim()) {
+              document.getElementById('ai-write-action-label').textContent =
+                actionLabel + ' · ' + headerBuf.trim();
+            }
+            // Write anything after the newline that came in this chunk
+            const codeStart = afterFence.slice(nlIdx + 1);
+            if (codeStart) writeChunk(codeStart);
+            pendingBuf = '';
+          }
+        }
+      } else {
+        // Inside code block — check for closing ```
+        pendingBuf += char;
+        // Look for ``` at start of line
+        const closeIdx = pendingBuf.indexOf('\n```');
+        if (closeIdx !== -1) {
+          // Write everything before the closing fence
+          writeChunk(pendingBuf.slice(0, closeIdx + 1)); // include the \n
+          pendingBuf = '';
+          inCodeBlock = false;
+          // After first code block, stop — don't write prose explanation
+          break;
+        } else if (pendingBuf.length > 6) {
+          // Safe to flush all but last 4 chars (avoid splitting ```)
+          writeChunk(pendingBuf.slice(0, -4));
+          pendingBuf = pendingBuf.slice(-4);
+        }
+      }
+    }
+  };
+
+  try {
+    _editorWriteAbort = new AbortController();
+    await callAI([{ role: 'user', content: prompt }], systemOverride, onChunk);
+
+    // If no code block was found — write the full response as-is
+    if (!inCodeBlock && charCount === 0 && fullText.trim()) {
+      const clean = fullText.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+      const code  = extractCode(clean);
+      monacoEditor.setValue(code);
+      charCount = code.length;
+    }
+
+    // Flush any remaining pending buffer
+    if (pendingBuf.trim()) writeChunk(pendingBuf);
+
+    // Save to file state
+    const f = getActiveFile();
+    if (f && monacoEditor) { f.content = monacoEditor.getValue(); saveFiles(); }
+
+    _editorWriteDone = true;
+    _finishWriteBar(charCount);
+    document.getElementById('ai-write-status').textContent = 'Done — review changes';
+  } catch (err) {
+    if (err.name === 'AbortError') return; // user stopped
+    _hideWriteBar();
+    showToast('❌ ' + err.message, 'error');
+    // Restore original on error
+    monacoEditor.setValue(_editorWriteOriginal);
+  } finally {
+    state.isStreaming = false;
+    document.getElementById('send-btn').disabled = false;
+    _editorWriteAbort = null;
+  }
+}
+
+// ─────────────────────────────────────────
+//  AI EDITOR ACTIONS (updated — write to editor)
+// ─────────────────────────────────────────
+async function aiAction(type) {
+  if (!state.provider) { openProviderModal(); showToast('Configure a provider first', 'error'); return; }
+  if (state.isStreaming) return;
+
+  const code     = monacoEditor ? monacoEditor.getValue() : '';
+  const selected = monacoEditor ? monacoEditor.getModel()?.getValueInRange(monacoEditor.getSelection()) : '';
+  const target   = selected.trim() || code;
+  const file     = getActiveFile();
+  const lang     = file?.language || 'code';
+
+  if (!target.trim() && type !== 'complete') { showToast('Editor is empty', 'error'); return; }
+
+  const actionLabels = {
+    explain:  'Explain code',
+    fix:      'Fix bugs',
+    refactor: 'Refactor',
+    comment:  'Add comments',
+    tests:    'Write tests',
+    complete: 'Complete code',
+  };
+
+  // explain → chat panel (text answer, not code)
+  if (type === 'explain') {
+    const prompt = `Explain this ${lang} code clearly. Describe what it does, key parts, and important patterns:\n\n\`\`\`${lang}\n${target}\n\`\`\``;
+    document.getElementById('chat-welcome').style.display = 'none';
+    appendMessage('user', `🤖 Explain code${selected.trim() ? ' (selection)' : ''}`);
+    state.chatHistory.push({ role: 'user', content: prompt });
+    state.isStreaming = true;
+    document.getElementById('send-btn').disabled = true;
+    const { wrapper, thinkHeader, thinkBody, thinkTokenEl, msgBody, stopCursor } = _createStreamingBubble();
+    let thinkText = '', responseText = '', thinkVisible = false, thinkCount = 0;
+    const onChunk = (chunk, isThinking) => {
+      if (isThinking) {
+        if (!thinkVisible) { wrapper.querySelector('.msg-reasoning-block').style.display = 'block'; thinkVisible = true; }
+        thinkText += chunk; thinkCount += chunk.length;
+        thinkBody.textContent = thinkText; thinkTokenEl.textContent = thinkCount + ' chars';
+      } else { responseText += chunk; _scheduleRender(msgBody, responseText); }
+      document.getElementById('chat-messages').scrollTop = 99999;
+    };
+    try {
+      await callAI(state.chatHistory, undefined, onChunk);
+      msgBody.innerHTML = renderMsgContent(responseText);
+      if (thinkVisible) { thinkHeader.classList.add('collapsed'); thinkBody.classList.add('hidden'); thinkTokenEl.textContent = thinkCount + ' chars · done'; }
+      if (stopCursor) stopCursor();
+      state.chatHistory.push({ role: 'assistant', content: responseText });
+    } catch (err) {
+      msgBody.innerHTML = `<span style="color:var(--red)">❌ ${escHtml(err.message)}</span>`;
+    } finally {
+      state.isStreaming = false;
+      document.getElementById('send-btn').disabled = false;
+    }
+    return;
+  }
+
+  // All other actions → write directly to editor
+  const sysPrompt = buildSysPrompt();
+
+  const prompts = {
+    fix:      `Fix ALL bugs in this ${lang} code. Return ONLY the complete corrected code in a single \`\`\`${lang} block.\n\n\`\`\`${lang}\n${target}\n\`\`\``,
+    refactor: `Refactor this ${lang} code for clarity, performance, and modern best practices. Return the COMPLETE refactored code in a single \`\`\`${lang} block.\n\n\`\`\`${lang}\n${target}\n\`\`\``,
+    comment:  `Add comprehensive JSDoc/inline comments to this ${lang} code. Return ONLY the fully commented code in a single \`\`\`${lang} block.\n\n\`\`\`${lang}\n${target}\n\`\`\``,
+    tests:    `Write comprehensive unit tests for this ${lang} code using the standard testing framework. Return ONLY the test code in a single \`\`\`${lang} block.\n\n\`\`\`${lang}\n${target}\n\`\`\``,
+    complete: `Continue and complete this ${lang} code. Return the FULL code (existing + new additions) in a single \`\`\`${lang} block.\n\n\`\`\`${lang}\n${target}\n\`\`\``,
+  };
+
+  await writeToEditor(prompts[type], actionLabels[type], sysPrompt);
+}
+
+// ─────────────────────────────────────────
+//  DIFF VIEWER
+// ─────────────────────────────────────────
+function showDiff(oldCode, newCode) {
+  originalCode = oldCode;
+  currentDiffCode = newCode;
+
+  const overlay = document.getElementById('diff-overlay');
+  overlay.classList.add('visible');
+
+  if (window.monaco) {
+    const container = document.getElementById('diff-editor');
+    if (diffEditor) diffEditor.dispose();
+    diffEditor = monaco.editor.createDiffEditor(container, {
+      theme: 'nexcode-dark',
+      fontSize: 13,
+      fontFamily: "'JetBrains Mono', monospace",
+      renderSideBySide: true,
+      readOnly: true,
+      minimap: { enabled: false },
+      automaticLayout: true,
+    });
+    const file = getActiveFile();
+    const lang = file?.language || 'javascript';
+    diffEditor.setModel({
+      original: monaco.editor.createModel(oldCode, lang),
+      modified: monaco.editor.createModel(newCode, lang),
+    });
+  }
+}
+
+function acceptDiff() {
+  if (monacoEditor && currentDiffCode) {
+    monacoEditor.setValue(currentDiffCode);
+    const f = getActiveFile();
+    if (f) { f.content = currentDiffCode; saveFiles(); }
+    showToast('Changes accepted ✓', 'success');
+  }
+  closeDiff();
+}
+
+function rejectDiff() {
+  showToast('Changes rejected', 'error');
+  closeDiff();
+}
+
+function closeDiff() {
+  document.getElementById('diff-overlay').classList.remove('visible');
+  if (diffEditor) { diffEditor.dispose(); diffEditor = null; }
+}
+
+function downloadDiffCode() {
+  if (!currentDiffCode) return;
+  const file = getActiveFile();
+  const name = file ? file.name.replace(/(\.[^.]+)$/, '.suggested$1') : 'suggested-code.txt';
+  _triggerDownload(name, currentDiffCode);
+  showToast(`Downloaded ${name}`, 'success');
+}
+
+// ─────────────────────────────────────────
+//  STREAMING UI HELPERS
+// ─────────────────────────────────────────
+
+// RAF handle for debounced mid-stream markdown render
+let _renderFrame = null;
+
+function _scheduleRender(msgBody, text) {
+  if (_renderFrame) return; // already scheduled
+  _renderFrame = requestAnimationFrame(() => {
+    _renderFrame = null;
+    // During streaming show plain preformatted text — fast, no flickering
+    msgBody.innerHTML = _renderStreaming(text);
+    const container = document.getElementById('chat-messages');
+    container.scrollTop = container.scrollHeight;
+  });
+}
+
+// Lightweight renderer for mid-stream (no code-store keys yet — just visuals)
+function _renderStreaming(text) {
+  // Split on ``` boundaries
+  const parts = text.split(/(```[\w]*(?:\n[\s\S]*?(?:```|$))?)/g);
+  return parts.map(part => {
+    const blockMatch = part.match(/^```(\w+)?\n([\s\S]*)```?$/);
+    if (blockMatch) {
+      const lang = blockMatch[1] || 'code';
+      const code = blockMatch[2];
+      return `<pre><div class="code-header"><span>${lang}</span></div><code>${escHtml(code)}</code></pre>`;
+    }
+    // partial open block (streaming, backticks not closed yet)
+    const openMatch = part.match(/^```(\w+)?\n([\s\S]*)$/);
+    if (openMatch) {
+      const lang = openMatch[1] || 'code';
+      return `<pre><div class="code-header"><span>${lang} <span style="opacity:.5;font-size:9px;">streaming…</span></span></div><code>${escHtml(openMatch[2])}</code></pre>`;
+    }
+    let html = escHtml(part);
+    html = html.replace(/`([^`]+)`/g, '<code style="background:var(--bg-void);border:1px solid var(--border);border-radius:3px;padding:1px 5px;font-family:var(--font-code);font-size:11px;">$1</code>');
+    html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+    html = html.replace(/\n/g, '<br>');
+    return html;
+  }).join('');
+}
+
+// Build the wrapper DOM node for a streaming AI response
+function _createStreamingBubble() {
+  const container = document.getElementById('chat-messages');
+  const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+  const wrapper = document.createElement('div');
+
+  // Hidden thinking block (shown when first thinking chunk arrives)
+  const thinkId = 'th_' + Date.now();
+  const reasoningBlock = document.createElement('div');
+  reasoningBlock.className = 'msg-reasoning-block';
+  reasoningBlock.style.display = 'none';
+  reasoningBlock.innerHTML = `
+    <div class="msg-reasoning-header" id="${thinkId}-hdr" onclick="toggleReasoningBlock('${thinkId}')">
+      <span class="th-icon">💭</span>
+      <span>Thinking…</span>
+      <span class="th-tokens" id="${thinkId}-tok"></span>
+      <span class="th-toggle">▾</span>
+    </div>
+    <div class="msg-reasoning-body" id="${thinkId}-body"></div>`;
+  wrapper.appendChild(reasoningBlock);
+
+  // Message bubble
+  const msgDiv = document.createElement('div');
+  msgDiv.className = 'msg ai';
+  msgDiv.innerHTML = `
+    <div class="msg-meta">
+      <div class="msg-avatar ai">AI</div>
+      <span>Assistant</span>
+      <span>${time}</span>
+      <span class="stream-cursor" id="${thinkId}-cursor">▋</span>
+    </div>
+    <div class="msg-body" id="${thinkId}-body-msg"></div>`;
+  wrapper.appendChild(msgDiv);
+  container.appendChild(wrapper);
+  container.scrollTop = container.scrollHeight;
+
+  // Blink cursor CSS (injected once)
+  if (!document.getElementById('stream-cursor-style')) {
+    const s = document.createElement('style');
+    s.id = 'stream-cursor-style';
+    s.textContent = `
+      .stream-cursor { animation: blink .7s step-end infinite; font-size:13px; color:var(--accent); margin-left:4px; }
+      @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+      .stream-cursor.done { display:none; }`;
+    document.head.appendChild(s);
+  }
+
+  // Hide cursor when stream ends
+  const cursor = msgDiv.querySelector('.stream-cursor');
+  wrapper._stopCursor = () => cursor.classList.add('done');
+
+  return {
+    wrapper,
+    thinkHeader:  document.getElementById(`${thinkId}-hdr`),
+    thinkBody:    document.getElementById(`${thinkId}-body`),
+    thinkTokenEl: document.getElementById(`${thinkId}-tok`),
+    msgBody:      document.getElementById(`${thinkId}-body-msg`),
+    stopCursor:   wrapper._stopCursor,
+  };
+}
+
+// ─────────────────────────────────────────
+//  MESSAGE RENDERING
+// ─────────────────────────────────────────
+function appendMessage(role, text, diffCode) {
+  // Strip <think> tags from displayed text but show them as reasoning blocks
+  let thinkText = '';
+  const thinkMatch = text.match(/<think>([\s\S]*?)<\/think>/i);
+  if (thinkMatch) {
+    thinkText = thinkMatch[1].trim();
+    text = text.replace(/<think>[\s\S]*?<\/think>/i, '').trim();
+  }
+  appendMessageWithReasoning(role, text, thinkText, diffCode);
+}
+
+function renderMsgContent(text, diffCode) {
+  // Parse markdown: code blocks, bold, inline code, newlines
+  let result = '';
+  let remaining = escHtml(text);
+
+  // Replace code blocks first (before escaping ruins them)
+  const rawText = text;
+  const parts = rawText.split(/(```[\w]*\n[\s\S]*?```)/g);
+
+  result = parts.map(part => {
+    const blockMatch = part.match(/^```(\w+)?\n([\s\S]*?)```$/);
+    if (blockMatch) {
+      const lang = blockMatch[1] || 'code';
+      const code = blockMatch[2].trim();
+      const escapedCode = escHtml(code);
+      // Store code in a global map for safe retrieval
+      const codeKey = 'code_' + (++window._codeIdx);
+      window._codeStore = window._codeStore || {};
+      window._codeStore[codeKey] = code;
+      return `<pre><div class="code-header">
+        <span>${lang}</span>
+        <button class="btn-insert-code" onclick="insertCodeToEditor('${codeKey}')">⬆ Insert</button>
+      </div><code>${escapedCode}</code></pre>`;
+    }
+    // Regular text: apply inline markdown
+    let html = escHtml(part);
+    html = html.replace(/`([^`]+)`/g, '<code style="background:var(--bg-void);border:1px solid var(--border);border-radius:3px;padding:1px 5px;font-family:var(--font-code);font-size:11px;">$1</code>');
+    html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+    html = html.replace(/\n/g, '<br>');
+    return html;
+  }).join('');
+
+  return result;
+}
+
+// Safe code insertion from stored key
+function insertCodeToEditor(key) {
+  const code = window._codeStore && window._codeStore[key];
+  if (!code) return;
+  const current = monacoEditor ? monacoEditor.getValue() : '';
+  showDiff(current, code);
+}
+
+function escHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function showThinking() {
+  const id = 'think_' + Date.now();
+  const container = document.getElementById('chat-messages');
+  const div = document.createElement('div');
+  div.id = id;
+  div.innerHTML = `<div class="msg-thinking">
+    <div class="thinking-dots"><span></span><span></span><span></span></div>
+    AI is thinking...
+  </div>`;
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+  return id;
+}
+
+function removeThinking(id) {
+  document.getElementById(id)?.remove();
+}
+
+function clearChat() {
+  state.chatHistory = [];
+  const container = document.getElementById('chat-messages');
+  container.innerHTML = '';
+  const welcome = document.getElementById('chat-welcome');
+  container.appendChild(welcome);
+  welcome.style.display = 'flex';
+}
+
+// ─────────────────────────────────────────
+//  CODE CONTEXT
+// ─────────────────────────────────────────
+function addCodeContext() {
+  const code = monacoEditor?.getValue() || '';
+  const file = getActiveFile();
+  if (!code) { showToast('No code in editor', 'error'); return; }
+
+  state.codeContext = true;
+  const row = document.getElementById('context-row');
+  row.innerHTML = `
+    <div class="context-chip">
+      📄 ${file?.name || 'file'}
+      <span class="ctx-remove" onclick="removeContext()">×</span>
+    </div>
+    <button class="context-add-btn" onclick="addCodeContext()">+ Add more</button>
+  `;
+
+  // Prepend code context to next message
+  const inp = document.getElementById('chat-input');
+  if (!inp.value.includes('```')) {
+    inp.placeholder = 'Ask about the code in context...';
+  }
+  showToast('Code context added', 'success');
+}
+
+function removeContext() {
+  state.codeContext = false;
+  document.getElementById('context-row').innerHTML = `
+    <button class="context-add-btn" onclick="addCodeContext()">+ Add code context</button>
+  `;
+}
+
+// ─────────────────────────────────────────
+//  RUN CODE (JS eval in browser, others show instructions)
+// ─────────────────────────────────────────
+function runCode() {
+  const file = getActiveFile();
+  if (!file) { showToast('No active file', 'error'); return; }
+
+  document.getElementById('chat-welcome').style.display = 'none';
+
+  if (file.language === 'javascript') {
+    const logs  = [];
+    const errors = [];
+    const origLog   = console.log;
+    const origError = console.error;
+    const origWarn  = console.warn;
+
+    console.log   = (...a) => { logs.push(a.map(x => typeof x === 'object' ? JSON.stringify(x, null, 2) : String(x)).join(' ')); origLog(...a); };
+    console.error = (...a) => { errors.push(a.map(String).join(' ')); origError(...a); };
+    console.warn  = (...a) => { logs.push('⚠ ' + a.map(String).join(' ')); origWarn(...a); };
+
+    try {
+      // eslint-disable-next-line no-new-func
+      new Function(monacoEditor.getValue())();
+      console.log   = origLog;
+      console.error = origError;
+      console.warn  = origWarn;
+      const output = logs.length ? logs.join('\n') : '(no output — no console.log calls)';
+      appendMessage('ai', `▶ **Run output** (${file.name}):\n\`\`\`\n${output}\n\`\`\``);
+    } catch (err) {
+      console.log   = origLog;
+      console.error = origError;
+      console.warn  = origWarn;
+      const allOutput = [...logs, ...errors].join('\n');
+      const errMsg = `❌ **Runtime error** in ${file.name}:\n\`\`\`\n${err.message}\n\`\`\``;
+      appendMessage('ai', allOutput ? errMsg + '\n\n**Output before crash:**\n```\n' + allOutput + '\n```' : errMsg);
+    }
+  } else {
+    const runHints = {
+      python:     `python ${file.name}`,
+      typescript: `ts-node ${file.name}`,
+      go:         `go run ${file.name}`,
+      rust:       `rustc ${file.name} && ./${file.name.replace('.rs', '')}`,
+      cpp:        `g++ ${file.name} -o out && ./out`,
+      java:       `javac ${file.name} && java ${file.name.replace('.java', '')}`,
+      shell:      `bash ${file.name}`,
+    };
+    const hint = runHints[file.language] || `Run ${file.name} in your terminal`;
+    appendMessage('ai', `▶ **${file.language.toUpperCase()} cannot run in browser.**\n\nRun it in your terminal:\n\`\`\`bash\n${hint}\n\`\`\``);
+  }
+}
+
+// ─────────────────────────────────────────
+//  ACTIVITY BAR
+// ─────────────────────────────────────────
+function setActivity(name, el) {
+  document.querySelectorAll('.ab-btn').forEach(b => b.classList.remove('active'));
+  if (el) el.classList.add('active');
+}
+
+// ─────────────────────────────────────────
+//  MODAL HELPERS
+// ─────────────────────────────────────────
+function openModal(id) {
+  document.getElementById(id).classList.remove('hidden');
+}
+function closeModal(id) {
+  document.getElementById(id).classList.add('hidden');
+}
+
+// Close modal on overlay click
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  overlay.addEventListener('click', function(e) {
+    if (e.target === this) this.classList.add('hidden');
+  });
+});
+
+// ─────────────────────────────────────────
+//  TOAST
+// ─────────────────────────────────────────
+function showToast(msg, type = 'success') {
+  const icons = { success: '✓', error: '✕', info: 'ℹ' };
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.innerHTML = `<span class="toast-icon">${icons[type] || '●'}</span><span>${msg}</span>`;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(() => { el.style.animation = 'toastOut 0.2s ease forwards'; setTimeout(() => el.remove(), 200); }, 2800);
+}
+
+// ─────────────────────────────────────────
+//  TEXTAREA AUTO-RESIZE
+// ─────────────────────────────────────────
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+
+// ─────────────────────────────────────────
+//  PLANNING MODE ENGINE
+// ─────────────────────────────────────────
+
+const PLAN_PHASES = { IDLE: 'idle', THINKING: 'thinking', PLANNING: 'planning', REVIEW: 'review', EXECUTING: 'executing', DONE: 'done' };
+
+let planState = {
+  phase: PLAN_PHASES.IDLE,
+  history: [],       // plan conversation history
+  plan: null,        // parsed plan object { title, steps: [{id,text,file,done}] }
+  currentStep: 0,
+  isStreaming: false,
+};
+
+// ── Open / Close ──────────────────────────
+function openPlanMode() {
+  document.getElementById('plan-panel').classList.add('visible');
+  document.getElementById('plan-mode-btn').classList.add('active');
+  document.getElementById('plan-input').focus();
+}
+
+function closePlanMode() {
+  document.getElementById('plan-panel').classList.remove('visible');
+  document.getElementById('plan-mode-btn').classList.remove('active');
+}
+
+// ── Quick prompts ─────────────────────────
+function planQuick(text) {
+  document.getElementById('plan-input').value = text;
+  sendPlanMessage();
+}
+
+// ── Input handler ─────────────────────────
+function handlePlanKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendPlanMessage(); }
+}
+
+async function sendPlanMessage() {
+  const input = document.getElementById('plan-input');
+  const msg = input.value.trim();
+  if (!msg || planState.isStreaming) return;
+  input.value = '';
+  autoResize(input);
+
+  if (!state.provider) { openProviderModal(); showToast('Configure a provider first', 'error'); return; }
+
+  // Hide welcome
+  document.getElementById('plan-welcome').style.display = 'none';
+
+  // Append user message
+  appendPlanMsg('user', msg);
+  planState.history.push({ role: 'user', content: msg });
+
+  // Determine what phase we're in
+  if (planState.phase === PLAN_PHASES.IDLE || planState.phase === PLAN_PHASES.THINKING) {
+    await runThinkPhase(msg);
+  } else if (planState.phase === PLAN_PHASES.REVIEW) {
+    await runRefinePlan(msg);
+  }
+}
+
+// ── Phase 1 + 2: Think → Plan ─────────────
+async function runThinkPhase(userGoal) {
+  setPlanPhase(PLAN_PHASES.THINKING);
+  planState.isStreaming = true;
+  setPlanSendDisabled(true);
+
+  // Step 1 – visible thinking/analysis
+  const thinkId = appendPlanThinking('Analyzing your request...');
+
+  const thinkSys = `You are a senior software architect and planning assistant inside NexCode IDE.
+The user will describe a coding task or project. You must:
+1. First show your THINKING in a <think> block — analyze the problem, consider tech stack, potential issues, architecture decisions.
+2. Then produce a structured PLAN in a <plan> JSON block.
+
+The <plan> JSON must be exactly:
+{
+  "title": "short plan title",
+  "language": "javascript|python|typescript|etc",
+  "summary": "one paragraph describing the approach",
+  "steps": [
+    { "id": 1, "text": "step description", "code_hint": "what code/function to write" },
+    ...
+  ]
+}
+
+Current file context: ${getActiveFile()?.name || 'none'} (${getActiveFile()?.language || 'unknown'})
+Existing code:
+\`\`\`
+${monacoEditor ? monacoEditor.getValue().slice(0, 800) : '(empty)'}
+\`\`\`
+
+Think deeply. The plan should have 3-7 concrete, actionable steps. Each step should map to real code.`;
+
+  try {
+    let thinkBuf = '';
+    let respBuf  = '';
+    const thinkEl = document.getElementById(thinkId + '-body');
+
+    const response = await callAI(planState.history, thinkSys, (chunk, isThinking) => {
+      if (isThinking) {
+        thinkBuf += chunk;
+        if (thinkEl) { thinkEl.textContent = thinkBuf; thinkEl.scrollTop = thinkEl.scrollHeight; }
+      } else {
+        respBuf += chunk;
+      }
+    });
+    planState.history.push({ role: 'assistant', content: response });
+
+    // Parse thinking and plan
+    const thinkMatch = response.match(/<think>([\s\S]*?)<\/think>/i);
+    const planMatch  = response.match(/<plan>([\s\S]*?)<\/plan>/i);
+
+    // Update thinking block
+    updatePlanThinking(thinkId, thinkMatch ? thinkMatch[1].trim() : response);
+
+    if (planMatch) {
+      try {
+        const parsed = JSON.parse(planMatch[1].trim());
+        planState.plan = { ...parsed, steps: parsed.steps.map(s => ({ ...s, done: false })) };
+        planState.phase = PLAN_PHASES.REVIEW;
+        setPlanPhase(PLAN_PHASES.PLANNING);
+        renderPlanCard();
+        setStep('plan');
+        setStep('review');
+        showExecuteRow();
+        appendPlanMsg('ai', `I've mapped out **${planState.plan.steps.length} steps** for "${planState.plan.title}". Review the plan above — ask me to change anything or hit **Execute** when ready.`);
+      } catch {
+        // Couldn't parse JSON — treat as conversational
+        appendPlanMsg('ai', response.replace(/<think>[\s\S]*?<\/think>/i, '').trim());
+        planState.phase = PLAN_PHASES.THINKING;
+      }
+    } else {
+      // AI responded conversationally (asking clarifying questions)
+      const cleanResp = response.replace(/<think>[\s\S]*?<\/think>/i, '').trim();
+      appendPlanMsg('ai', cleanResp);
+      planState.phase = PLAN_PHASES.THINKING;
+      setPlanPhase(PLAN_PHASES.THINKING);
+    }
+  } catch (err) {
+    updatePlanThinking(thinkId, 'Error: ' + err.message);
+    appendPlanMsg('ai', '❌ ' + err.message);
+    planState.phase = PLAN_PHASES.IDLE;
+  } finally {
+    planState.isStreaming = false;
+    setPlanSendDisabled(false);
+  }
+}
+
+// ── Phase 3: Refine plan based on user feedback ──
+async function runRefinePlan(feedback) {
+  planState.isStreaming = true;
+  setPlanSendDisabled(true);
+
+  const refineSys = `You are a planning assistant. The user has reviewed the plan and given feedback.
+Current plan: ${JSON.stringify(planState.plan, null, 2)}
+
+If the user wants to modify the plan, return an updated <plan> JSON block with the same structure.
+If the user is happy or just confirming, reply naturally and do NOT include a <plan> block.
+Keep responses concise.`;
+
+  const thinkId = appendPlanThinking('Updating plan...');
+
+  try {
+    const thinkEl = document.getElementById(thinkId + '-body');
+    let thinkBuf = '';
+
+    const response = await callAI(planState.history, refineSys, (chunk, isThinking) => {
+      if (isThinking) {
+        thinkBuf += chunk;
+        if (thinkEl) thinkEl.textContent = thinkBuf;
+      }
+    });
+    planState.history.push({ role: 'assistant', content: response });
+
+    const planMatch = response.match(/<plan>([\s\S]*?)<\/plan>/i);
+    if (planMatch) {
+      try {
+        const parsed = JSON.parse(planMatch[1].trim());
+        planState.plan = { ...parsed, steps: parsed.steps.map(s => ({ ...s, done: false })) };
+        updatePlanThinking(thinkId, 'Plan updated based on your feedback.');
+        renderPlanCard();
+        appendPlanMsg('ai', `Plan updated to **${planState.plan.steps.length} steps**. Ready to execute?`);
+      } catch {
+        updatePlanThinking(thinkId, 'Processed feedback.');
+        appendPlanMsg('ai', response.replace(/<plan>[\s\S]*?<\/plan>/i, '').trim());
+      }
+    } else {
+      updatePlanThinking(thinkId, 'Processed feedback.');
+      appendPlanMsg('ai', response.trim());
+    }
+  } catch (err) {
+    updatePlanThinking(thinkId, 'Error: ' + err.message);
+    appendPlanMsg('ai', '❌ ' + err.message);
+  } finally {
+    planState.isStreaming = false;
+    setPlanSendDisabled(false);
+  }
+}
+
+// ── Phase 4: Execute ──────────────────────
+async function executePlan() {
+  if (!planState.plan || planState.isStreaming) return;
+
+  setPlanPhase(PLAN_PHASES.EXECUTING);
+  setStep('exec');
+  document.getElementById('execute-btn').disabled = true;
+  planState.isStreaming = true;
+
+  const log = document.getElementById('exec-log');
+  log.classList.add('visible');
+  log.innerHTML = '';
+
+  function logLine(text, cls = 'info') {
+    const d = document.createElement('div');
+    d.className = 'exec-log-line ' + cls;
+    d.textContent = text;
+    log.appendChild(d);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  logLine('▶ Starting execution...', 'step');
+
+  const file = getActiveFile();
+  const lang = planState.plan.language || file?.language || 'javascript';
+
+  const execSys = `You are NexCode executor. You must implement ALL the steps in the plan as working, complete code.
+
+Plan: ${JSON.stringify(planState.plan, null, 2)}
+Language: ${lang}
+Existing code:
+\`\`\`${lang}
+${monacoEditor ? monacoEditor.getValue() : '// empty'}
+\`\`\`
+
+Rules:
+- Return ONLY ONE complete code block with ALL steps implemented together.
+- The code must be production-quality, not pseudocode.
+- Include all imports and necessary boilerplate.
+- Add brief inline comments marking where each step is implemented (// STEP 1: ...).
+- Do NOT add explanations outside the code block.
+- Return format: exactly one \`\`\`${lang} ... \`\`\` block.`;
+
+  try {
+    // Animate through steps visually
+    for (let i = 0; i < planState.plan.steps.length; i++) {
+      const step = planState.plan.steps[i];
+      logLine(`Step ${step.id}: ${step.text}`, 'step');
+      setActiveStepRow(i);
+      await sleep(180);
+    }
+
+    logLine('⟳ Generating code…', 'info');
+
+    const execHistory = [{ role: 'user', content: `Execute this plan and generate all the code: ${planState.plan.title}` }];
+
+    // Stream directly into editor
+    monacoEditor.setValue('');
+    _showWriteBar('Plan: ' + planState.plan.title.slice(0, 30));
+    _editorWriteOriginal = ''; // nothing to undo to (new file)
+
+    let inCodeBlock = false, pendingBuf = '', charCount = 0;
+
+    const writeChunkExec = (chunk) => {
+      const model = monacoEditor.getModel();
+      if (!model) return;
+      const totalLines = model.getLineCount();
+      const lastCol    = model.getLineMaxColumn(totalLines);
+      const range = new window.monaco.Range(totalLines, lastCol, totalLines, lastCol);
+      model.pushEditOperations([], [{ range, text: chunk, forceMoveMarkers: true }], () => null);
+      charCount += chunk.length;
+      document.getElementById('ai-write-tokens').textContent = charCount + ' chars';
+      const nl = model.getLineCount();
+      monacoEditor.revealPosition({ lineNumber: nl, column: 1 }, 1);
+    };
+
+    const response = await callAI(execHistory, execSys, (chunk, isThinking) => {
+      if (isThinking) return;
+      for (const char of chunk) {
+        if (!inCodeBlock) {
+          pendingBuf += char;
+          if (pendingBuf.includes('```')) {
+            const fi = pendingBuf.indexOf('```');
+            const after = pendingBuf.slice(fi + 3);
+            const nl = after.indexOf('\n');
+            if (nl !== -1) { inCodeBlock = true; const body = after.slice(nl + 1); if (body) writeChunkExec(body); pendingBuf = ''; }
+          }
+        } else {
+          pendingBuf += char;
+          const ci = pendingBuf.indexOf('\n```');
+          if (ci !== -1) { writeChunkExec(pendingBuf.slice(0, ci + 1)); pendingBuf = ''; inCodeBlock = false; break; }
+          else if (pendingBuf.length > 6) { writeChunkExec(pendingBuf.slice(0, -4)); pendingBuf = pendingBuf.slice(-4); }
+        }
+      }
+      log.scrollTop = log.scrollHeight;
+    });
+    if (pendingBuf.trim() && inCodeBlock) writeChunkExec(pendingBuf);
+
+    const codeMatch = response.match(/```(?:\w+)?\n?([\s\S]*?)```/);
+    if (charCount > 0 || codeMatch) {
+      // Mark all steps done
+      planState.plan.steps.forEach((s, i) => { s.done = true; setDoneStepRow(i); });
+      logLine('✓ All steps complete', 'done');
+      logLine('✓ Code written to editor', 'done');
+
+      // Save file
+      const f = getActiveFile();
+      if (f && monacoEditor) { f.content = monacoEditor.getValue(); saveFiles(); }
+
+      _finishWriteBar(charCount);
+      setPlanPhase(PLAN_PHASES.DONE);
+      appendPlanMsg('ai', `✅ Done! **${planState.plan.steps.length} steps** written to editor.\n\nReview the code, then click **Keep** or **Undo** in the top bar.`);
+    } else {
+      _hideWriteBar();
+      logLine('⚠ No code block found in response', 'err');
+      appendPlanMsg('ai', response);
+    }
+  } catch (err) {
+    logLine('✕ Error: ' + err.message, 'err');
+    appendPlanMsg('ai', '❌ Execution failed: ' + err.message);
+    setPlanPhase(PLAN_PHASES.REVIEW);
+  } finally {
+    planState.isStreaming = false;
+    document.getElementById('execute-btn').disabled = false;
+  }
+}
+
+// ── Plan UI helpers ───────────────────────
+function setPlanPhase(phase) {
+  planState.phase = phase;
+  const badge = document.getElementById('plan-phase-badge');
+  const labels = {
+    idle: 'Idle', thinking: 'Thinking', planning: 'Planning',
+    review: 'Review', executing: 'Executing', done: 'Done'
+  };
+  const classes = {
+    idle: 'idle', thinking: 'thinking', planning: 'planning',
+    review: 'planning', executing: 'executing', done: 'done'
+  };
+  badge.textContent = labels[phase] || phase;
+  badge.className = 'plan-phase-badge ' + (classes[phase] || 'idle');
+}
+
+function setStep(which) {
+  const map = { think: 'step-think', plan: 'step-plan', review: 'step-review', exec: 'step-exec' };
+  const order = ['step-think', 'step-plan', 'step-review', 'step-exec'];
+  const target = map[which];
+  const idx = order.indexOf(target);
+  order.forEach((id, i) => {
+    const el = document.getElementById(id);
+    el.className = 'step-item';
+    if (i < idx)  el.classList.add('done');
+    if (i === idx) el.classList.add(which === 'exec' ? 'exec' : 'active');
+  });
+}
+
+function renderPlanCard() {
+  const plan = planState.plan;
+  if (!plan) return;
+  const existing = document.getElementById('plan-card-block');
+  if (existing) existing.remove();
+
+  const container = document.getElementById('plan-messages');
+  const card = document.createElement('div');
+  card.id = 'plan-card-block';
+  card.className = 'plan-card';
+  card.innerHTML = `
+    <div class="plan-card-header">
+      <span style="font-size:14px;">📋</span>
+      <span class="plan-card-title">${escHtml(plan.title)}</span>
+      <span class="plan-card-meta">${plan.steps.length} steps · ${plan.language || 'code'}</span>
+    </div>
+    ${plan.summary ? `<div style="padding:8px 12px;font-size:11px;color:var(--text-sec);line-height:1.6;border-bottom:1px solid var(--border);">${escHtml(plan.summary)}</div>` : ''}
+    <div class="plan-steps-list" id="plan-steps-list">
+      ${plan.steps.map((s, i) => `
+        <div class="plan-step-row" id="plan-step-row-${i}">
+          <div class="step-row-num">${s.id}</div>
+          <div class="step-row-text">${escHtml(s.text)}${s.code_hint ? `<br><span style="font-size:10px;color:var(--text-muted);">${escHtml(s.code_hint)}</span>` : ''}</div>
+          <span class="step-row-status" id="step-status-${i}">○</span>
+        </div>`).join('')}
+    </div>`;
+  // Insert before plan-execute-row or at end of messages
+  const execRow = document.getElementById('plan-execute-row');
+  container.insertBefore(card, execRow.previousSibling ? null : null);
+  container.appendChild(card);
+  container.scrollTop = container.scrollHeight;
+}
+
+function setActiveStepRow(idx) {
+  document.querySelectorAll('.plan-step-row').forEach(r => r.classList.remove('active-step'));
+  const row = document.getElementById('plan-step-row-' + idx);
+  if (row) { row.classList.add('active-step'); row.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+  const st = document.getElementById('step-status-' + idx);
+  if (st) st.textContent = '⟳';
+}
+
+function setDoneStepRow(idx) {
+  const row = document.getElementById('plan-step-row-' + idx);
+  if (row) { row.classList.remove('active-step'); row.classList.add('done-step'); }
+  const st = document.getElementById('step-status-' + idx);
+  if (st) st.textContent = '✓';
+}
+
+function showExecuteRow() {
+  document.getElementById('plan-execute-row').style.display = 'flex';
+  document.getElementById('plan-execute-row').style.flexDirection = 'column';
+  document.getElementById('plan-execute-row').style.gap = '6px';
+}
+
+function appendPlanThinking(initialText) {
+  const id = 'plan-think-' + Date.now();
+  const container = document.getElementById('plan-messages');
+  const div = document.createElement('div');
+  div.id = id;
+  div.className = 'plan-thinking-block';
+  div.innerHTML = `
+    <div class="plan-thinking-header" onclick="toggleThinking('${id}')">
+      <span class="th-icon">💭</span>
+      <span>Thinking...</span>
+      <span class="th-toggle">▾</span>
+    </div>
+    <div class="plan-thinking-body" id="${id}-body">${escHtml(initialText)}</div>`;
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+  return id;
+}
+
+function updatePlanThinking(id, text) {
+  const header = document.querySelector('#' + id + ' .plan-thinking-header span:nth-child(2)');
+  if (header) header.textContent = text.length > 60 ? text.slice(0, 60) + '...' : text;
+  const body = document.getElementById(id + '-body');
+  if (body) body.textContent = text;
+}
+
+function toggleThinking(id) {
+  const header = document.querySelector('#' + id + ' .plan-thinking-header');
+  const body   = document.getElementById(id + '-body');
+  if (!header || !body) return;
+  header.classList.toggle('collapsed');
+  body.classList.toggle('hidden');
+}
+
+function appendPlanMsg(role, text) {
+  const container = document.getElementById('plan-messages');
+
+  // Strip <think> from text (already shown via appendPlanThinking)
+  text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+  if (!text) return;
+
+  const div = document.createElement('div');
+  div.className = 'plan-msg ' + role;
+  // Markdown: bold, inline code, newlines
+  let html = escHtml(text)
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`([^`]+)`/g, '<code style="background:var(--bg-void);border:1px solid var(--border);border-radius:3px;padding:1px 5px;font-family:var(--font-code);font-size:10.5px;">$1</code>')
+    .replace(/\n/g, '<br>');
+
+  div.innerHTML = `
+    <div class="plan-msg-meta">
+      <div class="plan-avatar ${role}">${role === 'user' ? 'ME' : 'AI'}</div>
+      <span>${role === 'user' ? 'You' : 'Assistant'}</span>
+    </div>
+    <div class="plan-msg-body">${html}</div>`;
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+function resetPlan() {
+  planState = { phase: PLAN_PHASES.IDLE, history: [], plan: null, currentStep: 0, isStreaming: false };
+  const container = document.getElementById('plan-messages');
+  container.innerHTML = '';
+  const welcome = document.getElementById('plan-welcome');
+  container.appendChild(welcome);
+  welcome.style.display = 'flex';
+  document.getElementById('plan-execute-row').style.display = 'none';
+  document.getElementById('exec-log').classList.remove('visible');
+  document.getElementById('exec-log').innerHTML = '';
+  setPlanPhase(PLAN_PHASES.IDLE);
+  ['step-think','step-plan','step-review','step-exec'].forEach(id => {
+    document.getElementById(id).className = 'step-item';
+  });
+}
+
+function setPlanSendDisabled(val) {
+  document.getElementById('plan-send-btn').disabled = val;
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ─────────────────────────────────────────
+//  DOWNLOAD / EXPORT
+// ─────────────────────────────────────────
+function downloadActiveFile() {
+  const file = getActiveFile();
+  if (!file) { showToast('No active file', 'error'); return; }
+  const content = monacoEditor ? monacoEditor.getValue() : file.content;
+  _triggerDownload(file.name, content);
+  showToast(`Downloaded ${file.name}`, 'success');
+}
+
+function downloadAllFiles() {
+  if (state.files.length === 0) { showToast('No files to download', 'error'); return; }
+  if (state.files.length === 1) { downloadActiveFile(); return; }
+
+  // Save current editor content
+  const cur = getActiveFile();
+  if (cur && monacoEditor) cur.content = monacoEditor.getValue();
+
+  // Build a simple text archive: each file separated by a header comment
+  const lines = [];
+  state.files.forEach(file => {
+    const commentChar = { javascript:'//','typescript':'//','python':'#','html':'<!--','css':'/*','shell':'#','markdown':'#' }[file.language] || '//';
+    const commentEnd   = { html:'-->', css:'*/' }[file.language] || '';
+    lines.push(`${commentChar} ===== FILE: ${file.name} =====${commentEnd ? ' ' + commentEnd : ''}`);
+    lines.push(file.content || '');
+    lines.push('');
+  });
+  _triggerDownload('nexcode-export.txt', lines.join('\n'));
+  showToast(`Downloaded ${state.files.length} files`, 'success');
+}
+
+function _triggerDownload(filename, content) {
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// ─────────────────────────────────────────
+//  AI THINKING / REASONING DISPLAY
+// ─────────────────────────────────────────
+function appendThinkingBlock(container, thinkText, tokenCount) {
+  const block = document.createElement('div');
+  block.className = 'msg-reasoning-block';
+  const id = 'reasoning_' + Date.now();
+  const tokens = tokenCount ? `${tokenCount} tokens` : '';
+  block.innerHTML = `
+    <div class="msg-reasoning-header" id="${id}-hdr" onclick="toggleReasoningBlock('${id}')">
+      <span class="th-icon">💭</span>
+      <span>AI Reasoning</span>
+      <span class="th-tokens">${tokens}</span>
+      <span class="th-toggle">▾</span>
+    </div>
+    <div class="msg-reasoning-body" id="${id}-body">${escHtml(thinkText)}</div>`;
+  container.appendChild(block);
+  return block;
+}
+
+function toggleReasoningBlock(id) {
+  const hdr  = document.getElementById(id + '-hdr');
+  const body = document.getElementById(id + '-body');
+  if (!hdr || !body) return;
+  hdr.classList.toggle('collapsed');
+  body.classList.toggle('hidden');
+}
+
+// Enhanced appendMessage to handle reasoning/thinking
+function appendMessageWithReasoning(role, text, thinkingText, diffCode) {
+  const container = document.getElementById('chat-messages');
+  document.getElementById('chat-welcome').style.display = 'none';
+
+  const wrapper = document.createElement('div');
+
+  // If there's reasoning, prepend the collapsible block
+  if (thinkingText && thinkingText.trim()) {
+    appendThinkingBlock(wrapper, thinkingText.trim());
+  }
+
+  const div = document.createElement('div');
+  div.className = `msg ${role}`;
+  const initials = role === 'user' ? 'ME' : 'AI';
+  const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  div.innerHTML = `
+    <div class="msg-meta">
+      <div class="msg-avatar ${role}">${initials}</div>
+      <span>${role === 'user' ? 'You' : 'Assistant'}</span>
+      <span>${time}</span>
+    </div>
+    <div class="msg-body">${renderMsgContent(text, diffCode)}</div>
+  `;
+  wrapper.appendChild(div);
+  container.appendChild(wrapper);
+  container.scrollTop = container.scrollHeight;
+}
+
+// ─────────────────────────────────────────
+//  KEYBOARD SHORTCUTS
+// ─────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === ',') { e.preventDefault(); openProviderModal(); }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'n') { e.preventDefault(); openNewFileModal(); }
+  if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); downloadActiveFile(); }
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 's') { e.preventDefault(); downloadAllFiles(); }
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'p') { e.preventDefault(); openPlanMode(); }
+  if (e.key === 'Escape') {
+    closeDiff();
+    const panel = document.getElementById('plan-panel');
+    if (panel.classList.contains('visible')) closePlanMode();
+  }
+});
+
+// ─────────────────────────────────────────
+//  BOOT
+// ─────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
